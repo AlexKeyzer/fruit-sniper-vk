@@ -1,0 +1,585 @@
+*, *::before, *::after {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-context-menu: none;
+    context-menu: none;
+}
+
+html, body {
+    margin: 0; 
+    padding: 0; 
+    width: 100%; 
+    height: 100%;
+    overflow: hidden;
+    background: #1a1a1a;
+    touch-action: none;
+    -ms-touch-action: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+body::before {
+    content: ''; 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%;
+    background: url('bg.jpg') center/cover no-repeat;
+    z-index: -1;
+}
+
+/* Обертка для центрирования */
+.game-wrapper {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    background: url('bg.jpg') center/cover no-repeat;
+    position: relative;
+}
+
+.game-wrapper::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 0;
+}
+
+/* Игровой контейнер 9:16 */
+.game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    max-width: 56.25vh; /* 9/16 от высоты */
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.9);
+    overflow: hidden;
+    background: url('bg.jpg') center/cover no-repeat;
+    z-index: 1;
+}
+
+/* Для широких экранов ограничиваем высоту */
+@media (min-aspect-ratio: 9/16) {
+    .game-container {
+        max-width: 100vw;
+        height: 177.78vw;
+        max-height: 100vh;
+    }
+}
+
+#igrovoePole {
+    width: 100%; 
+    height: 100%;
+    display: block;
+    image-rendering: auto; 
+    touch-action: none;
+    -ms-touch-action: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+#interfeis {
+    position: absolute; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%;
+    pointer-events: none;
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: center;
+    overflow: hidden;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    z-index: 10;
+}
+
+/* === ПАНЕЛЬ ЗВУКА === */
+#panelZvuka {
+    position: absolute; 
+    top: 10px; 
+    left: 10px;
+    background: rgba(0,0,0,0.6);
+    padding: 5px 10px;
+    border-radius: 15px;
+    display: flex; 
+    align-items: center; 
+    gap: 5px;
+    pointer-events: auto;
+    z-index: 100;
+    transform-origin: top left;
+    transition: transform 0.2s ease;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.knopkaZvukaOformlenie {
+    background: none; 
+    border: none; 
+    color: white; 
+    font-size: 16px;
+    cursor: pointer; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+    padding: 0; 
+    margin: 0; 
+    outline: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+#polzunokZvuka {
+    width: 50px; 
+    cursor: pointer; 
+    accent-color: #4CAF50;
+    -webkit-appearance: none; 
+    appearance: none;
+    height: 4px; 
+    border-radius: 2px; 
+    background: rgba(255,255,255,0.3);
+    margin: 0;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+#polzunokZvuka::-webkit-slider-thumb {
+    -webkit-appearance: none; 
+    appearance: none;
+    width: 12px; 
+    height: 12px; 
+    border-radius: 50%;
+    background: #4CAF50; 
+    cursor: pointer;
+}
+
+/* === ПАНЕЛЬ МОНЕТ === */
+#panelMonet {
+    position: absolute;
+    top: 10px; 
+    right: 10px; 
+    left: auto;
+    background: rgba(0,0,0,0.6);
+    padding: 5px 10px;
+    border-radius: 15px;
+    display: flex; 
+    align-items: center; 
+    gap: 6px;
+    color: gold; 
+    font-size: 18px; 
+    font-weight: bold;
+    pointer-events: auto;
+    z-index: 50;
+    transform-origin: top right;
+    transition: transform 0.2s ease;
+    -webkit-user-select: none;
+    user-select: none;
+    white-space: nowrap;
+    text-shadow: 2px 2px 4px #000;
+}
+
+/* === ПАНЕЛИ ИГРОВОГО HUD (уровень и ножи) === */
+.game-hud {
+    position: absolute;
+    top: 10px;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    font-size: 24px; 
+    color: #FFFFFF;
+    text-shadow: 2px 2px 4px #000000;
+    pointer-events: none;
+    z-index: 50;
+    white-space: nowrap;
+    line-height: 1.2;
+    display: flex;
+    align-items: center;
+}
+
+#panelLevel {
+    left: 10px;
+    text-align: left;
+    justify-content: flex-start;
+}
+
+#panelNozhei {
+    right: 10px;
+    text-align: right;
+    justify-content: flex-end;
+}
+
+.ikonkaMonety { 
+    width: 20px; 
+    height: 20px; 
+    pointer-events: none; 
+}
+
+/* === МЕНЮ И ПОПАПЫ === */
+.ekran {
+    pointer-events: auto;
+    background: rgba(0,0,0,0.85);
+    padding: 15px;
+    border-radius: 15px;
+    text-align: center;
+    color: white;
+    display: flex; 
+    flex-direction: column; 
+    gap: 10px;
+    border: 2px solid rgba(255,255,255,0.2);
+    width: 85%;
+    max-width: 320px;
+    max-height: 85vh;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    transform-origin: center center;
+}
+
+.ekran.main-menu {
+    padding: 20px;
+    gap: 15px;
+    max-width: 280px;
+}
+
+.ekran.main-menu .knopka {
+    padding: 15px 20px;
+    font-size: 18px;
+}
+
+.popup-overlay {
+    position: absolute !important;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 200;
+    width: 90%;
+    max-width: 300px;
+    max-height: 90vh;
+}
+
+.popup-scale-target {
+    transition: transform 0.2s ease;
+}
+
+.skryto { 
+    display: none !important; 
+}
+
+h1 { 
+    margin: 0; 
+    font-size: 24px;
+    text-shadow: 2px 2px 4px #000; 
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.2;
+    hyphens: auto;
+}
+
+h2 { 
+    margin: 0; 
+    color: #FFD700; 
+    text-shadow: 1px 1px 2px #000; 
+}
+
+.krasnyiTekst { 
+    color: #ff4444; 
+}
+
+.knopka {
+    background: #4CAF50; 
+    color: white; 
+    border: none; 
+    padding: 10px 15px;
+    font-size: 14px;
+    font-weight: bold; 
+    border-radius: 8px; 
+    cursor: pointer;
+    box-shadow: 0 4px 0 #2E7D32; 
+    transition: 0.1s; 
+    width: 100%; 
+    outline: none;
+    -webkit-user-select: none; 
+    user-select: none;
+    line-height: 1.3;
+    flex-shrink: 0;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.knopkaReklama {
+    background: #E91E63; 
+    box-shadow: 0 4px 0 #C2185B;
+    animation: puls 1.5s infinite; 
+    position: relative; 
+    padding: 12px 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-icon {
+    font-size: 20px;
+    display: block;
+}
+
+.btn-text {
+    display: block;
+    line-height: 1.2;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    font-size: 13px;
+}
+
+.btn-text small {
+    font-size: 10px;
+    opacity: 0.9;
+    display: block;
+}
+
+.knopka:active { 
+    transform: translateY(4px); 
+    box-shadow: none; 
+}
+
+.knopka:disabled { 
+    opacity: 0.6; 
+    cursor: not-allowed; 
+    transform: none !important; 
+    box-shadow: 0 4px 0 #2E7D32 !important; 
+}
+
+.knopkaMagazinaCvet { 
+    background: #9C27B0; 
+    box-shadow: 0 4px 0 #6A1B9A; 
+}
+
+.knopka.serya { 
+    background: #555; 
+    box-shadow: 0 4px 0 #333; 
+}
+
+@keyframes puls { 
+    0% { transform: scale(1); } 
+    50% { transform: scale(1.05); } 
+    100% { transform: scale(1); } 
+}
+
+.ruletkaBlok {
+    background: linear-gradient(45deg, #4a148c, #311b92);
+    border: 2px solid #FFD700; 
+    border-radius: 10px; 
+    padding: 8px;
+    display: flex; 
+    align-items: center; 
+    gap: 10px; 
+    text-align: left;
+}
+
+#kartinkaSunduka { 
+    width: 40px; 
+    height: 40px; 
+    filter: drop-shadow(0 0 10px #FFD700); 
+    animation: plavnayaTryaska 3s infinite; 
+    pointer-events: none; 
+    flex-shrink: 0;
+}
+
+@keyframes plavnayaTryaska { 
+    0%, 90% { transform: rotate(0deg); } 
+    92% { transform: rotate(10deg); } 
+    94% { transform: rotate(-10deg); } 
+    96% { transform: rotate(10deg); } 
+    98% { transform: rotate(-10deg); } 
+    100% { transform: rotate(0deg); } 
+}
+
+.chest-opening { 
+    animation: chestBurst 0.8s ease-in-out forwards !important; 
+}
+
+@keyframes chestBurst { 
+    0% { transform: scale(1) rotate(0deg); filter: brightness(1); } 
+    20% { transform: scale(1.2) rotate(-15deg); filter: brightness(1.5); } 
+    40% { transform: scale(1.2) rotate(15deg); filter: brightness(1.5); } 
+    60% { transform: scale(1.3) rotate(-20deg); filter: brightness(2); } 
+    80% { transform: scale(1.4) rotate(20deg); filter: brightness(2.5); } 
+    100% { transform: scale(0) rotate(0deg); filter: brightness(3); opacity: 0; } 
+}
+
+.flash-overlay { 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100vw; 
+    height: 100vh; 
+    background: white; 
+    z-index: 9999; 
+    pointer-events: none; 
+    animation: fadeOut 1s forwards; 
+}
+
+@keyframes fadeOut { 
+    from { opacity: 1; } 
+    to { opacity: 0; } 
+}
+
+.setka { 
+    display: grid; 
+    grid-template-columns: 1fr 1fr; 
+    gap: 8px; 
+    max-height: 40vh; 
+    overflow-y: auto; 
+    padding-right: 4px; 
+    scrollbar-width: thin; 
+    scrollbar-color: #666 transparent; 
+}
+
+.setka::-webkit-scrollbar { 
+    width: 5px; 
+}
+
+.setka::-webkit-scrollbar-track { 
+    background: transparent; 
+}
+
+.setka::-webkit-scrollbar-thumb { 
+    background: #666; 
+    border-radius: 3px; 
+}
+
+.kartochkaSkina { 
+    background: rgba(255,255,255,0.1); 
+    border-radius: 8px; 
+    padding: 8px; 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    gap: 4px; 
+    position: relative; 
+}
+
+.kartochkaSkina.legendary { 
+    background: linear-gradient(135deg, #b8860b 0%, #ffd700 50%, #b8860b 100%); 
+    border: 1px solid white; 
+}
+
+.kartochkaSkina img { 
+    height: 40px; 
+    object-fit: contain; 
+    filter: drop-shadow(2px 4px 6px black); 
+    pointer-events: none; 
+}
+
+.nazvanieSkina { 
+    font-size: 11px; 
+    font-weight: bold; 
+    color: white; 
+    text-align: center; 
+    word-wrap: break-word;
+}
+
+.opisanieSkina { 
+    font-size: 9px; 
+    color: #b3e5fc; 
+    min-height: 20px; 
+    display: flex; 
+    align-items: center; 
+    text-align: center; 
+    word-wrap: break-word;
+}
+
+.MknopkaKupit, .MknopkaVybrat, .MknopkaVybrano { 
+    background: #FF9800; 
+    color: white; 
+    border: none; 
+    padding: 5px; 
+    border-radius: 4px; 
+    cursor: pointer; 
+    width: 100%; 
+    font-weight: bold; 
+    font-size: 11px; 
+    outline: none; 
+    word-wrap: break-word;
+}
+
+.MknopkaVybrat { 
+    background: #2196F3; 
+}
+
+.MknopkaVybrano { 
+    background: #4CAF50; 
+    cursor: default; 
+    opacity: 0.8; 
+}
+
+.MknopkaKupit:disabled { 
+    background: #555; 
+    cursor: not-allowed; 
+    color: #aaa; 
+}
+
+/* Адаптивность для очень маленьких экранов */
+@media (max-width: 400px) {
+    .game-container { max-width: 100vw; }
+    .ekran, .popup-overlay { padding: 10px; width: 95%; gap: 8px; max-height: 85vh; }
+    .ekran.main-menu { padding: 15px; gap: 12px; }
+    .ekran.main-menu .knopka { padding: 12px 15px; font-size: 16px; }
+    h1 { font-size: 20px; }
+    .knopka { font-size: 12px; padding: 8px 10px; }
+    .knopkaReklama { padding: 10px 12px; }
+    .btn-icon { font-size: 20px; }
+    .btn-text small { font-size: 10px; }
+    #panelMonet, .game-hud { font-size: 16px; padding: 4px 8px; }
+    .ikonkaMonety { width: 18px; height: 18px; }
+    #panelZvuka { padding: 4px 8px; }
+    #polzunokZvuka { width: 45px; }
+}
+
+@media (max-width: 320px) {
+    .ekran, .popup-overlay { padding: 8px; gap: 6px; }
+    .ekran.main-menu { padding: 12px; gap: 10px; }
+    .ekran.main-menu .knopka { padding: 10px 12px; font-size: 14px; }
+    h1 { font-size: 18px; }
+    .knopka { font-size: 11px; padding: 6px 8px; }
+    .btn-icon { font-size: 18px; }
+    .btn-text small { font-size: 9px; }
+    #panelMonet, .game-hud { font-size: 14px; }
+}
+
+@media (max-height: 500px) {
+    .ekran, .popup-overlay { max-height: 90vh; padding: 8px; gap: 5px; }
+    .ekran.main-menu { padding: 12px; gap: 10px; }
+    .ekran.main-menu .knopka { padding: 10px 12px; font-size: 14px; }
+    h1 { font-size: 18px; }
+    .knopka { padding: 6px 8px; font-size: 11px; }
+    .btn-icon { font-size: 16px; }
+    .btn-text small { font-size: 9px; }
+}
+
+@media (max-width: 280px) {
+    h1 { font-size: 16px; }
+    .btn-text { font-size: 10px; }
+    .btn-text small { font-size: 8px; }
+    .ekran.main-menu { transform: scale(1); }
+}
