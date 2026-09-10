@@ -7,17 +7,13 @@
     <meta property="og:title" content="Фруктовый Снайпер">
     <meta name="vk-game-title" content="Фруктовый Снайпер">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-
-    <!-- VK Bridge SDK -->
     <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
-
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
             -webkit-tap-highlight-color: transparent;
             -webkit-touch-callout: none;
             -webkit-user-select: none;
-            -khtml-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
             user-select: none;
@@ -31,6 +27,11 @@
             background: #1a1a1a;
             touch-action: none;
             -ms-touch-action: none;
+            /* Safe area для iPhone и Android */
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
         }
         body::before {
             content: '';
@@ -74,7 +75,6 @@
             display: block;
             image-rendering: auto;
             touch-action: none;
-            -ms-touch-action: none;
         }
         #interfeis {
             position: absolute;
@@ -88,6 +88,146 @@
             overflow: hidden;
             z-index: 10;
         }
+        /* === ПРЕЛОАДЕР === */
+        #preloader {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: #000;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            pointer-events: auto;
+        }
+        #preloader.hidden { display: none; }
+        .preloader-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #FFD700;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px #000;
+        }
+        .preloader-bar-container {
+            width: 70%;
+            max-width: 280px;
+            height: 14px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 7px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .preloader-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #FFD700, #FFA500);
+            border-radius: 7px;
+            transition: width 0.2s ease;
+        }
+        .preloader-percent {
+            margin-top: 15px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        /* === ЭКРАН СОГЛАШЕНИЯ === */
+        #agreementScreen {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            pointer-events: auto;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        #agreementScreen.hidden { display: none; }
+        .agreement-box {
+            max-width: 360px;
+            width: 90%;
+            background: rgba(20,20,20,0.95);
+            border: 2px solid #FFD700;
+            border-radius: 15px;
+            padding: 20px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .agreement-title {
+            color: #FFD700;
+            font-size: 20px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .agreement-age {
+            background: #FFD700;
+            color: #000;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 18px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        .agreement-text {
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 15px;
+            color: #e0e0e0;
+        }
+        .agreement-links {
+            font-size: 12px;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        .agreement-links a {
+            color: #4CAF50;
+            text-decoration: underline;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+        .agreement-checkbox {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .agreement-checkbox input {
+            margin-top: 3px;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+        .agreement-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 4px 0 #2E7D32;
+            pointer-events: auto;
+        }
+        .agreement-btn:disabled {
+            background: #555;
+            box-shadow: 0 4px 0 #333;
+            cursor: not-allowed;
+        }
+        .agreement-btn:active:not(:disabled) {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+        /* === ОСНОВНОЙ ИНТЕРФЕЙС === */
         #panelZvuka {
             position: absolute;
             top: 10px; left: 10px;
@@ -147,23 +287,6 @@
             cursor: pointer;
             padding: 0; margin: 0; outline: none;
         }
-        #panelIap {
-            position: absolute;
-            bottom: 10px; right: 10px;
-            background: rgba(255,215,0,0.9);
-            padding: 6px 12px;
-            border-radius: 15px;
-            pointer-events: auto;
-            z-index: 100;
-            transform-origin: bottom right;
-            transition: transform 0.2s ease;
-            color: #1a1a1a;
-            font-weight: bold;
-            font-size: 13px;
-            cursor: pointer;
-            border: 2px solid #FFD700;
-        }
-        #panelIap.hidden { display: none; }
         #panelMonet {
             position: absolute;
             top: 10px; right: 10px; left: auto;
@@ -236,8 +359,6 @@
             margin: 0; font-size: 24px;
             text-shadow: 2px 2px 4px #000;
             word-wrap: break-word;
-            word-break: break-word;
-            overflow-wrap: break-word;
             line-height: 1.2;
             hyphens: auto;
         }
@@ -259,7 +380,6 @@
             line-height: 1.3;
             flex-shrink: 0;
             word-wrap: break-word;
-            overflow-wrap: break-word;
         }
         .knopkaReklama {
             background: #E91E63;
@@ -272,17 +392,10 @@
             align-items: center;
             gap: 5px;
         }
-        .knopkaIap {
-            background: linear-gradient(135deg, #FFD700, #FFA500);
-            box-shadow: 0 4px 0 #B8860B;
-            color: #1a1a1a;
-        }
         .btn-icon { font-size: 20px; display: block; }
         .btn-text {
             display: block;
             line-height: 1.2;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
             font-size: 13px;
         }
         .btn-text small { font-size: 10px; opacity: 0.9; display: block; }
@@ -361,7 +474,6 @@
             flex-direction: column;
             align-items: center;
             gap: 4px;
-            position: relative;
         }
         .kartochkaSkina.legendary {
             background: linear-gradient(135deg, #b8860b 0%, #ffd700 50%, #b8860b 100%);
@@ -373,7 +485,7 @@
             filter: drop-shadow(2px 4px 6px black);
             pointer-events: none;
         }
-        .nazvanieSkina { font-size: 11px; font-weight: bold; color: white; text-align: center; word-wrap: break-word; }
+        .nazvanieSkina { font-size: 11px; font-weight: bold; color: white; text-align: center; }
         .opisanieSkina {
             font-size: 9px;
             color: #b3e5fc;
@@ -381,7 +493,6 @@
             display: flex;
             align-items: center;
             text-align: center;
-            word-wrap: break-word;
         }
         .MknopkaKupit, .MknopkaVybrat, .MknopkaVybrano {
             background: #FF9800;
@@ -393,8 +504,6 @@
             width: 100%;
             font-weight: bold;
             font-size: 11px;
-            outline: none;
-            word-wrap: break-word;
         }
         .MknopkaVybrat { background: #2196F3; }
         .MknopkaVybrano { background: #4CAF50; cursor: default; opacity: 0.8; }
@@ -445,6 +554,39 @@
     <div class="game-wrapper">
         <div class="game-container" id="gameContainer">
             <canvas id="igrovoePole"></canvas>
+            <!-- ПРЕЛОАДЕР -->
+            <div id="preloader">
+                <div class="preloader-title">ФРУКТОВЫЙ СНАЙПЕР</div>
+                <div class="preloader-bar-container">
+                    <div class="preloader-bar" id="preloaderBar"></div>
+                </div>
+                <div class="preloader-percent" id="preloaderPercent">0%</div>
+            </div>
+            <!-- ЭКРАН СОГЛАШЕНИЯ -->
+            <div id="agreementScreen" class="hidden">
+                <div class="agreement-box">
+                    <div class="agreement-age">0+</div>
+                    <div class="agreement-title">Добро пожаловать!</div>
+                    <div class="agreement-text">
+                        Перед началом игры ознакомьтесь с правилами. Используя приложение, вы подтверждаете, что вам исполнилось 18 лет или вы получили согласие законного представителя.
+                    </div>
+                    <div class="agreement-links" id="agreementLinks">
+                        <label class="agreement-checkbox">
+                            <input type="checkbox" id="agreeCheck1">
+                            <span>Я принимаю <a onclick="openDoc('user')">Пользовательское соглашение</a></span>
+                        </label>
+                        <label class="agreement-checkbox">
+                            <input type="checkbox" id="agreeCheck2">
+                            <span>Я принимаю <a onclick="openDoc('privacy')">Политику конфиденциальности</a> и даю согласие на обработку моих данных</span>
+                        </label>
+                        <label class="agreement-checkbox">
+                            <input type="checkbox" id="agreeCheck3">
+                            <span>Мне исполнилось 18 лет или у меня есть согласие законного представителя</span>
+                        </label>
+                    </div>
+                    <button class="agreement-btn" id="agreeBtn" disabled onclick="acceptAgreement()">НАЧАТЬ ИГРУ</button>
+                </div>
+            </div>
             <div id="interfeis">
                 <div id="panelZvuka">
                     <button id="knopkaZvuka" class="knopkaZvukaOformlenie" aria-label="Sound">🔊</button>
@@ -453,7 +595,6 @@
                 <div id="panelYazyka">
                     <button id="knopkaYazyka" class="knopkaYazykaOformlenie" aria-label="Language">🌐 RU</button>
                 </div>
-                <div id="panelIap" class="hidden">💎 NO ADS (99)</div>
                 <div id="panelMonet">
                     <img src="apple.png" alt="Apples" class="ikonkaMonety">
                     <span id="schetMonet">0</span>
@@ -512,7 +653,6 @@
         sessionStartTime: Date.now(),
         lastInterstitialTime: 0,
         userId: null,
-        adFreePurchased: false, // Флаг IAP: отключение рекламы навсегда
 
         async init() {
             try {
@@ -522,12 +662,20 @@
                     this.vkBridge = vkBridge;
                     console.log('[VK] Bridge initialized');
 
-                    // Получаем информацию о пользователе
                     try {
                         const user = await vkBridge.send('VKWebAppGetUserInfo');
                         this.userId = user.id;
                     } catch (e) {
                         console.warn('[VK] Cannot get user info:', e);
+                    }
+
+                    // Обработка VKWebAppViewHide (п. 2.2.5)
+                    if (vkBridge.subscribe) {
+                        vkBridge.subscribe((event) => {
+                            if (event.detail && event.detail.type === 'VKWebAppViewHide') {
+                                pauseGameForAd();
+                            }
+                        });
                     }
                 } else {
                     console.log('[VK] Bridge not found, using web mode');
@@ -539,7 +687,6 @@
             }
         },
 
-        // Сигнал готовности игры
         signalReady() {
             if (this.platform === 'vk' && this.vkBridge) {
                 try {
@@ -551,7 +698,6 @@
             }
         },
 
-        // Сохранение данных: localStorage + облако VK
         async saveData(data) {
             try {
                 localStorage.setItem('vk_snaiper_monety', String(data.monety));
@@ -559,8 +705,6 @@
                 localStorage.setItem('vk_snaiper_selectedSkin', data.selectedSkin);
                 localStorage.setItem('vk_snaiper_volume', String(data.volume));
                 localStorage.setItem('vk_snaiper_muted', data.muted ? '1' : '0');
-                localStorage.setItem('vk_snaiper_adfree', data.adFreePurchased ? '1' : '0');
-
                 if (this.platform === 'vk' && this.vkBridge) {
                     await this.vkBridge.send('VKWebAppStorageSet', {
                         key: 'vk_snaiper_save',
@@ -572,7 +716,6 @@
             }
         },
 
-        // Загрузка данных: облако VK, fallback на localStorage
         async loadData() {
             try {
                 if (this.platform === 'vk' && this.vkBridge) {
@@ -586,51 +729,35 @@
                         } catch (e) {}
                     }
                 }
-
-                // Fallback на localStorage
                 const m = parseInt(localStorage.getItem('vk_snaiper_monety'));
                 const s = JSON.parse(localStorage.getItem('vk_snaiper_skins') || 'null');
                 const sel = localStorage.getItem('vk_snaiper_selectedSkin');
                 const v = parseFloat(localStorage.getItem('vk_snaiper_volume'));
                 const mut = localStorage.getItem('vk_snaiper_muted') === '1';
-                const adFree = localStorage.getItem('vk_snaiper_adfree') === '1';
                 return {
                     monety: isNaN(m) ? 0 : m,
                     skins: (s && s.length) ? s : ["knife"],
                     selectedSkin: sel || "knife",
                     volume: isNaN(v) ? 0.4 : v,
-                    muted: mut,
-                    adFreePurchased: adFree
+                    muted: mut
                 };
             } catch (e) {
-                console.warn('[VK] Load error:', e);
                 return null;
             }
         },
 
-        // Interstitial: только в логических паузах, ≤ 1 раз в 180 сек, не в первые 2 минуты
         async showInterstitial(onOpen, onClose, onError) {
             const now = Date.now();
             const allowed = (now - this.sessionStartTime >= 120000) &&
                             (now - this.lastInterstitialTime >= 180000);
-
-            // Если куплено отключение рекламы — пропускаем
-            if (this.adFreePurchased) {
-                if (onClose) onClose();
-                return;
-            }
-
             if (!allowed) {
                 if (onClose) onClose();
                 return;
             }
-
             if (this.platform !== 'vk' || !this.vkBridge) {
-                console.log('[VK-stub] Interstitial skipped (web mode)');
                 if (onClose) onClose();
                 return;
             }
-
             try {
                 if (onOpen) onOpen();
                 await this.vkBridge.send('VKWebAppShowNativeAds', {
@@ -645,10 +772,8 @@
             }
         },
 
-        // Rewarded video: за награду (возрождение)
         async showRewarded(onOpen, onRewarded, onClose, onError) {
             if (this.platform !== 'vk' || !this.vkBridge) {
-                console.log('[VK-stub] Rewarded granted (web mode)');
                 if (onOpen) onOpen();
                 setTimeout(() => {
                     if (onRewarded) onRewarded();
@@ -656,7 +781,6 @@
                 }, 500);
                 return;
             }
-
             try {
                 if (onOpen) onOpen();
                 const result = await this.vkBridge.send('VKWebAppShowRewardedAd', {});
@@ -671,41 +795,12 @@
             }
         },
 
-        // IAP: покупка отключения рекламы навсегда (99 голосов)
-        async purchaseAdFree(onSuccess, onError) {
-            if (this.platform !== 'vk' || !this.vkBridge) {
-                console.log('[VK-stub] IAP not available (web mode)');
-                if (onError) onError();
-                return;
-            }
-
-            try {
-                // Показ окна покупки через голоса ВК
-                const result = await this.vkBridge.send('VKWebAppShowOrderBox', {
-                    type: 'item',
-                    item: 'ad_free'
-                });
-
-                if (result && result.status === 'success') {
-                    this.adFreePurchased = true;
-                    if (onSuccess) onSuccess();
-                } else {
-                    if (onError) onError();
-                }
-            } catch (e) {
-                console.warn('[VK] IAP error:', e);
-                if (onError) onError();
-            }
-        },
-
-        // Язык: параметр vk_language в URL, fallback на navigator.language
         getLanguage() {
             try {
                 const urlParams = new URLSearchParams(window.location.search);
                 const vkLang = urlParams.get('vk_language') || urlParams.get('language');
                 if (vkLang === 'ru') return 'ru';
                 if (vkLang === 'en') return 'en';
-
                 const browserLang = (navigator.language || navigator.userLanguage || 'ru').toLowerCase();
                 return browserLang.startsWith('ru') ? 'ru' : 'en';
             } catch (e) {
@@ -715,7 +810,78 @@
     };
 
     // ============================================
-    // ИГРОВАЯ ЛОГИКА (без изменений)
+    // ПРЕЛОАДЕР
+    // ============================================
+    let totalAssets = 0;
+    let loadedAssets = 0;
+    const preloaderBar = document.getElementById('preloaderBar');
+    const preloaderPercent = document.getElementById('preloaderPercent');
+    const preloaderEl = document.getElementById('preloader');
+
+    function updatePreloader() {
+        const percent = totalAssets > 0 ? Math.floor((loadedAssets / totalAssets) * 100) : 0;
+        if (preloaderBar) preloaderBar.style.width = percent + '%';
+        if (preloaderPercent) preloaderPercent.textContent = percent + '%';
+    }
+
+    function hidePreloader() {
+        if (preloaderEl) preloaderEl.classList.add('hidden');
+    }
+
+    // ============================================
+    // ЭКРАН СОГЛАШЕНИЯ
+    // ============================================
+    const agreementScreen = document.getElementById('agreementScreen');
+    const agreeBtn = document.getElementById('agreeBtn');
+    const agreeCheck1 = document.getElementById('agreeCheck1');
+    const agreeCheck2 = document.getElementById('agreeCheck2');
+    const agreeCheck3 = document.getElementById('agreeCheck3');
+
+    function checkAgreementCheckboxes() {
+        if (agreeBtn && agreeCheck1 && agreeCheck2 && agreeCheck3) {
+            agreeBtn.disabled = !(agreeCheck1.checked && agreeCheck2.checked && agreeCheck3.checked);
+        }
+    }
+
+    if (agreeCheck1 && agreeCheck2 && agreeCheck3) {
+        agreeCheck1.addEventListener('change', checkAgreementCheckboxes);
+        agreeCheck2.addEventListener('change', checkAgreementCheckboxes);
+        agreeCheck3.addEventListener('change', checkAgreementCheckboxes);
+    }
+
+    function showAgreementScreen() {
+        if (agreementScreen) {
+            agreementScreen.classList.remove('hidden');
+        }
+    }
+
+    window.acceptAgreement = function() {
+        if (agreementScreen) agreementScreen.classList.add('hidden');
+        try { localStorage.setItem('vk_snaiper_agreed', '1'); } catch (e) {}
+    };
+
+    window.openDoc = function(type) {
+        let url = '';
+        if (type === 'user') {
+            url = 'https://dev.vk.ru/ru/mini-apps/legal/user-agreement';
+        } else if (type === 'privacy') {
+            url = 'https://dev.vk.ru/ru/mini-apps/legal/privacy';
+        }
+        if (url) {
+            try { window.open(url, '_blank', 'noopener'); } catch (e) {}
+        }
+    };
+
+    function isFirstLaunch() {
+        try {
+            return localStorage.getItem('vk_snaiper_agreed') !== '1';
+        } catch (e) {
+            return true;
+        }
+    }
+
+    // ============================================
+    // ИГРОВАЯ ЛОГИКА
     // ============================================
     const holst = document.getElementById("igrovoePole");
     const kist = holst.getContext("2d");
@@ -737,7 +903,6 @@
     const polzunokZvuka = document.getElementById("polzunokZvuka");
     const knopkaYazyka = document.getElementById("knopkaYazyka");
     const panelYazyka = document.getElementById("panelYazyka");
-    const panelIap = document.getElementById("panelIap");
 
     const uiPanelLevel = document.getElementById("panelLevel");
     const uiPanelNozhei = document.getElementById("panelNozhei");
@@ -893,10 +1058,6 @@
             const scale = Math.max(0.6, Math.min(globalScale, 1));
             panelYazyka.style.transform = `scale(${scale})`;
         }
-        if (panelIap) {
-            const scale = Math.max(0.6, Math.min(globalScale, 1));
-            panelIap.style.transform = `scale(${scale})`;
-        }
 
         updateHUD();
         updateUI();
@@ -913,8 +1074,7 @@
             skins: kuplyennyeSkins,
             selectedSkin: vybrannyiSkinId,
             volume: currentVolume,
-            muted: isMuted,
-            adFreePurchased: PlatformAdapter.adFreePurchased
+            muted: isMuted
         });
     }
 
@@ -926,10 +1086,6 @@
                 if (data.selectedSkin) vybrannyiSkinId = data.selectedSkin;
                 if (data.volume !== undefined) currentVolume = data.volume;
                 if (data.muted !== undefined) isMuted = data.muted;
-                if (data.adFreePurchased !== undefined) {
-                    PlatformAdapter.adFreePurchased = data.adFreePurchased;
-                    updateIapButton();
-                }
                 updateUI();
             }
         });
@@ -940,18 +1096,6 @@
         updateVolumeUI();
     }
 
-    function updateIapButton() {
-        if (panelIap) {
-            if (PlatformAdapter.adFreePurchased || PlatformAdapter.platform !== 'vk') {
-                panelIap.classList.add('hidden');
-            } else {
-                panelIap.classList.remove('hidden');
-                panelIap.innerText = currentLang === 'ru' ? '💎 БЕЗ РЕКЛАМЫ (99)' : '💎 NO ADS (99)';
-            }
-        }
-    }
-
-    // === АУДИО ===
     let audioContext = null;
     let masterGain = null;
     let isAudioUnlocked = false;
@@ -985,11 +1129,20 @@
 
     function loadAudioFiles() {
         if (!initAudio()) return;
-        Object.entries(audioFileList).forEach(([key, url]) => {
-            fetch(url).then(res => res.ok ? res.arrayBuffer() : Promise.reject(new Error('404')))
+        const audioKeys = Object.keys(audioFileList);
+        audioKeys.forEach(key => {
+            fetch(audioFileList[key])
+                .then(res => res.ok ? res.arrayBuffer() : Promise.reject(new Error('404')))
                 .then(buf => audioContext.decodeAudioData(buf))
-                .then(dec => { audioBuffers[key] = dec; })
-                .catch(() => {});
+                .then(dec => {
+                    audioBuffers[key] = dec;
+                    loadedAssets++;
+                    updatePreloader();
+                })
+                .catch(() => {
+                    loadedAssets++;
+                    updatePreloader();
+                });
         });
     }
 
@@ -1032,7 +1185,6 @@
         };
     }
 
-    // === ЛОКАЛИЗАЦИЯ ===
     let currentLang = 'ru';
     const i18n = {
         ru: {
@@ -1046,9 +1198,7 @@
             equipped: "В РУКАХ", equip: "ВЗЯТЬ", legendaryReward: "КЛИНОК КОСМОСА!",
             knife: "Нож", pencil: "Карандаш", sword: "Меч",
             shuriken: "Сюрикен", axe: "Топор", wand: "Посох",
-            legendary: "Легендарный Клинок",
-            noAds: "💎 БЕЗ РЕКЛАМЫ (99)",
-            noAdsPurchased: "✅ Реклама отключена"
+            legendary: "Легендарный Клинок"
         },
         en: {
             title: "FRUIT SNIPER",
@@ -1061,9 +1211,7 @@
             equipped: "EQUIPPED", equip: "EQUIP", legendaryReward: "COSMIC BLADE!",
             knife: "Knife", pencil: "Pencil", sword: "Sword",
             shuriken: "Shuriken", axe: "Axe", wand: "Wand",
-            legendary: "Legendary Blade",
-            noAds: "💎 NO ADS (99)",
-            noAdsPurchased: "✅ Ads removed"
+            legendary: "Legendary Blade"
         }
     };
 
@@ -1092,7 +1240,6 @@
         if (el("knopkaVoskresheniya")) el("knopkaVoskresheniya").innerHTML = `<span class="btn-icon">🎬</span><span class="btn-text">${t("continue")}<br><small>${t("forVideo")}</small></span>`;
         if (el("knopkaZanovo")) el("knopkaZanovo").innerText = t("restart");
         obnovitKnopkuYazyka();
-        updateIapButton();
         updateHUD();
         otrisovatMagazin();
     }
@@ -1102,20 +1249,6 @@
             currentLang = (currentLang === 'en') ? 'ru' : 'en';
             try { localStorage.setItem('vk_snaiper_lang', currentLang); } catch (e) {}
             applyLanguage();
-        };
-    }
-
-    if (panelIap) {
-        panelIap.onclick = function() {
-            PlatformAdapter.purchaseAdFree(
-                () => {
-                    saveData();
-                    updateIapButton();
-                },
-                () => {
-                    console.warn('[VK] IAP cancelled or failed');
-                }
-            );
         };
     }
 
@@ -1143,12 +1276,14 @@
     const kartinkaGolem = new Image(); kartinkaGolem.src = "golem.png";
 
     const kartinkiOruzhiya = {};
-    let vsegoKartinok = 10 + vseSkins.length;
-    let zagruzhenoKartinok = 0;
+    const vsegoImages = 10 + vseSkins.length;
+    const vsegoAudio = Object.keys(audioFileList).length;
+    totalAssets = vsegoImages + vsegoAudio;
 
     function proverkaZagr() {
-        zagruzhenoKartinok++;
-        if (zagruzhenoKartinok === vsegoKartinok) {
+        loadedAssets++;
+        updatePreloader();
+        if (loadedAssets >= totalAssets) {
             nastroikaEkrana();
             lastTime = performance.now();
             igrovoiCikl(lastTime);
@@ -1158,13 +1293,14 @@
     [kartinkaYabloko, kartinkaBronya, kartinkaMeteor, kartinkaSunduk, kartinkaArbuz,
      kartinkaBoss, kartinkaPizza, kartinkaBurger, kartinkaStump, kartinkaGolem].forEach(img => {
         img.onload = proverkaZagr;
+        img.onerror = proverkaZagr;
     });
 
     vseSkins.forEach(s => {
         const i = new Image();
         i.src = s.file;
         i.onload = proverkaZagr;
-        i.onerror = () => console.warn('Missing asset:', s.file);
+        i.onerror = proverkaZagr;
         kartinkiOruzhiya[s.id] = i;
     });
 
@@ -1363,9 +1499,7 @@
     function handleInput(e) {
         const tgt = e.target;
         if (tgt.id === "polzunokZvuka" || tgt.id === "knopkaZvuka" || tgt.id === "knopkaYazyka" ||
-            tgt.id === "panelIap" ||
-            tgt.closest('.knopka') || tgt.closest('#panelZvuka') ||
-            tgt.closest('#panelYazyka') || tgt.closest('#panelIap')) return;
+            tgt.closest('.knopka') || tgt.closest('#panelZvuka') || tgt.closest('#panelYazyka')) return;
         if (e.type === 'touchstart' || e.type === 'mousedown') {
             e.preventDefault();
             sdelatBrosok();
@@ -1473,7 +1607,6 @@
             meteor.aktiven = false;
         }
         updateHUD();
-        // Interstitial между уровнями
         PlatformAdapter.showInterstitial(pauseGameForAd, resumeGameAfterAd, resumeGameAfterAd);
     }
 
@@ -1718,18 +1851,43 @@
     async function initGame() {
         await PlatformAdapter.init();
 
-        // Определение языка: VK параметр > сохранённый > ru по умолчанию
         let savedLang = null;
         try { savedLang = localStorage.getItem('vk_snaiper_lang'); } catch (e) {}
         const detectedLang = PlatformAdapter.getLanguage();
         currentLang = (savedLang === 'ru' || savedLang === 'en') ? savedLang : detectedLang;
-        applyLanguage();
 
-        await loadDataFromAdapter();
         PlatformAdapter.signalReady();
         nastroikaEkrana();
         loadAudioFiles();
+
+        // Показ экрана согласия при первом запуске (п. 1.1.4, 2.1.5)
+        if (isFirstLaunch()) {
+            setTimeout(() => {
+                hidePreloader();
+                showAgreementScreen();
+            }, 1000);
+        }
+
+        // Применение языка после загрузки
+        setTimeout(() => {
+            applyLanguage();
+            loadDataFromAdapter();
+            // Скрываем прелоадер если соглашение уже принято
+            if (!isFirstLaunch() && preloaderEl && !preloaderEl.classList.contains('hidden')) {
+                // Прелоадер скроется когда загрузятся все ассеты
+            }
+        }, 100);
     }
+
+    // Переопределение proverkaZagr чтобы скрывать прелоадер по завершении
+    const originalProverkaZagr = proverkaZagr;
+    window._checkLoadComplete = function() {
+        if (loadedAssets >= totalAssets) {
+            if (!isFirstLaunch()) {
+                setTimeout(hidePreloader, 300);
+            }
+        }
+    };
 
     window.addEventListener("resize", forceResize);
     window.addEventListener("orientationchange", () => { setTimeout(forceResize, 100); });
