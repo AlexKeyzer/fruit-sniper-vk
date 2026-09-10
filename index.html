@@ -27,7 +27,6 @@
             background: #1a1a1a;
             touch-action: none;
             -ms-touch-action: none;
-            /* Safe area для iPhone и Android */
             padding-top: env(safe-area-inset-top);
             padding-bottom: env(safe-area-inset-bottom);
             padding-left: env(safe-area-inset-left);
@@ -131,101 +130,6 @@
             margin-top: 15px;
             font-size: 16px;
             font-weight: bold;
-        }
-        /* === ЭКРАН СОГЛАШЕНИЯ === */
-        #agreementScreen {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.95);
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            pointer-events: auto;
-            color: white;
-            font-family: Arial, sans-serif;
-        }
-        #agreementScreen.hidden { display: none; }
-        .agreement-box {
-            max-width: 360px;
-            width: 90%;
-            background: rgba(20,20,20,0.95);
-            border: 2px solid #FFD700;
-            border-radius: 15px;
-            padding: 20px;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-        .agreement-title {
-            color: #FFD700;
-            font-size: 20px;
-            margin-bottom: 15px;
-            text-align: center;
-        }
-        .agreement-age {
-            background: #FFD700;
-            color: #000;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: bold;
-            font-size: 18px;
-            text-align: center;
-            margin-bottom: 15px;
-        }
-        .agreement-text {
-            font-size: 13px;
-            line-height: 1.5;
-            margin-bottom: 15px;
-            color: #e0e0e0;
-        }
-        .agreement-links {
-            font-size: 12px;
-            margin-bottom: 15px;
-            line-height: 1.6;
-        }
-        .agreement-links a {
-            color: #4CAF50;
-            text-decoration: underline;
-            pointer-events: auto;
-            cursor: pointer;
-        }
-        .agreement-checkbox {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            margin-bottom: 15px;
-            font-size: 12px;
-            line-height: 1.4;
-        }
-        .agreement-checkbox input {
-            margin-top: 3px;
-            pointer-events: auto;
-            cursor: pointer;
-        }
-        .agreement-btn {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 12px;
-            border-radius: 8px;
-            font-size: 15px;
-            font-weight: bold;
-            cursor: pointer;
-            width: 100%;
-            box-shadow: 0 4px 0 #2E7D32;
-            pointer-events: auto;
-        }
-        .agreement-btn:disabled {
-            background: #555;
-            box-shadow: 0 4px 0 #333;
-            cursor: not-allowed;
-        }
-        .agreement-btn:active:not(:disabled) {
-            transform: translateY(4px);
-            box-shadow: none;
         }
         /* === ОСНОВНОЙ ИНТЕРФЕЙС === */
         #panelZvuka {
@@ -393,11 +297,7 @@
             gap: 5px;
         }
         .btn-icon { font-size: 20px; display: block; }
-        .btn-text {
-            display: block;
-            line-height: 1.2;
-            font-size: 13px;
-        }
+        .btn-text { display: block; line-height: 1.2; font-size: 13px; }
         .btn-text small { font-size: 10px; opacity: 0.9; display: block; }
         .knopka:active { transform: translateY(4px); box-shadow: none; }
         .knopka:disabled {
@@ -561,31 +461,6 @@
                     <div class="preloader-bar" id="preloaderBar"></div>
                 </div>
                 <div class="preloader-percent" id="preloaderPercent">0%</div>
-            </div>
-            <!-- ЭКРАН СОГЛАШЕНИЯ -->
-            <div id="agreementScreen" class="hidden">
-                <div class="agreement-box">
-                    <div class="agreement-age">0+</div>
-                    <div class="agreement-title">Добро пожаловать!</div>
-                    <div class="agreement-text">
-                        Перед началом игры ознакомьтесь с правилами. Используя приложение, вы подтверждаете, что вам исполнилось 18 лет или вы получили согласие законного представителя.
-                    </div>
-                    <div class="agreement-links" id="agreementLinks">
-                        <label class="agreement-checkbox">
-                            <input type="checkbox" id="agreeCheck1">
-                            <span>Я принимаю <a onclick="openDoc('user')">Пользовательское соглашение</a></span>
-                        </label>
-                        <label class="agreement-checkbox">
-                            <input type="checkbox" id="agreeCheck2">
-                            <span>Я принимаю <a onclick="openDoc('privacy')">Политику конфиденциальности</a> и даю согласие на обработку моих данных</span>
-                        </label>
-                        <label class="agreement-checkbox">
-                            <input type="checkbox" id="agreeCheck3">
-                            <span>Мне исполнилось 18 лет или у меня есть согласие законного представителя</span>
-                        </label>
-                    </div>
-                    <button class="agreement-btn" id="agreeBtn" disabled onclick="acceptAgreement()">НАЧАТЬ ИГРУ</button>
-                </div>
             </div>
             <div id="interfeis">
                 <div id="panelZvuka">
@@ -810,16 +685,20 @@
     };
 
     // ============================================
-    // ПРЕЛОАДЕР
+    // ПРЕЛОАДЕР (единая точка завершения загрузки)
     // ============================================
-    let totalAssets = 0;
     let loadedAssets = 0;
+    let totalAssets = 0;
+    let gameLoopStarted = false;
     const preloaderBar = document.getElementById('preloaderBar');
     const preloaderPercent = document.getElementById('preloaderPercent');
     const preloaderEl = document.getElementById('preloader');
 
     function updatePreloader() {
-        const percent = totalAssets > 0 ? Math.floor((loadedAssets / totalAssets) * 100) : 0;
+        let percent = 0;
+        if (totalAssets > 0) {
+            percent = Math.min(100, Math.floor((loadedAssets / totalAssets) * 100));
+        }
         if (preloaderBar) preloaderBar.style.width = percent + '%';
         if (preloaderPercent) preloaderPercent.textContent = percent + '%';
     }
@@ -828,55 +707,22 @@
         if (preloaderEl) preloaderEl.classList.add('hidden');
     }
 
-    // ============================================
-    // ЭКРАН СОГЛАШЕНИЯ
-    // ============================================
-    const agreementScreen = document.getElementById('agreementScreen');
-    const agreeBtn = document.getElementById('agreeBtn');
-    const agreeCheck1 = document.getElementById('agreeCheck1');
-    const agreeCheck2 = document.getElementById('agreeCheck2');
-    const agreeCheck3 = document.getElementById('agreeCheck3');
-
-    function checkAgreementCheckboxes() {
-        if (agreeBtn && agreeCheck1 && agreeCheck2 && agreeCheck3) {
-            agreeBtn.disabled = !(agreeCheck1.checked && agreeCheck2.checked && agreeCheck3.checked);
-        }
+    // ЕДИНСТВЕННАЯ точка старта игры: вызывается когда все ассеты готовы
+    function finishLoading() {
+        if (gameLoopStarted) return;
+        gameLoopStarted = true;
+        hidePreloader();
+        nastroikaEkrana();
+        lastTime = performance.now();
+        igrovoiCikl(lastTime);
     }
 
-    if (agreeCheck1 && agreeCheck2 && agreeCheck3) {
-        agreeCheck1.addEventListener('change', checkAgreementCheckboxes);
-        agreeCheck2.addEventListener('change', checkAgreementCheckboxes);
-        agreeCheck3.addEventListener('change', checkAgreementCheckboxes);
-    }
-
-    function showAgreementScreen() {
-        if (agreementScreen) {
-            agreementScreen.classList.remove('hidden');
-        }
-    }
-
-    window.acceptAgreement = function() {
-        if (agreementScreen) agreementScreen.classList.add('hidden');
-        try { localStorage.setItem('vk_snaiper_agreed', '1'); } catch (e) {}
-    };
-
-    window.openDoc = function(type) {
-        let url = '';
-        if (type === 'user') {
-            url = 'https://dev.vk.ru/ru/mini-apps/legal/user-agreement';
-        } else if (type === 'privacy') {
-            url = 'https://dev.vk.ru/ru/mini-apps/legal/privacy';
-        }
-        if (url) {
-            try { window.open(url, '_blank', 'noopener'); } catch (e) {}
-        }
-    };
-
-    function isFirstLaunch() {
-        try {
-            return localStorage.getItem('vk_snaiper_agreed') !== '1';
-        } catch (e) {
-            return true;
+    // Вызывается КАЖДЫМ ассетом (картинка ИЛИ звук, успех ИЛИ ошибка)
+    function assetLoaded() {
+        loadedAssets++;
+        updatePreloader();
+        if (loadedAssets >= totalAssets) {
+            finishLoading();
         }
     }
 
@@ -1096,9 +942,13 @@
         updateVolumeUI();
     }
 
+    // === АУДИО ===
     let audioContext = null;
     let masterGain = null;
     let isAudioUnlocked = false;
+
+    const audioBuffers = {};
+    const audioFileList = { throw: "throw.mp3", fail: "fail.mp3", apple: "apple.mp3", win: "win.mp3", chest: "chest.mp3" };
 
     function initAudio() {
         if (audioContext) return true;
@@ -1124,24 +974,23 @@
     document.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
     document.addEventListener('keydown', unlockAudio, { once: true, passive: true });
 
-    const audioBuffers = {};
-    const audioFileList = { throw: "throw.mp3", fail: "fail.mp3", apple: "apple.mp3", win: "win.mp3", chest: "chest.mp3" };
-
     function loadAudioFiles() {
-        if (!initAudio()) return;
-        const audioKeys = Object.keys(audioFileList);
-        audioKeys.forEach(key => {
-            fetch(audioFileList[key])
+        const audioCount = Object.keys(audioFileList).length;
+        if (!initAudio()) {
+            // Нет WebAudio — считаем звуковые ассеты загруженными, чтобы игра стартовала
+            for (let i = 0; i < audioCount; i++) assetLoaded();
+            return;
+        }
+        Object.entries(audioFileList).forEach(([key, url]) => {
+            fetch(url)
                 .then(res => res.ok ? res.arrayBuffer() : Promise.reject(new Error('404')))
                 .then(buf => audioContext.decodeAudioData(buf))
                 .then(dec => {
                     audioBuffers[key] = dec;
-                    loadedAssets++;
-                    updatePreloader();
+                    assetLoaded();
                 })
                 .catch(() => {
-                    loadedAssets++;
-                    updatePreloader();
+                    assetLoaded();
                 });
         });
     }
@@ -1185,6 +1034,7 @@
         };
     }
 
+    // === ЛОКАЛИЗАЦИЯ ===
     let currentLang = 'ru';
     const i18n = {
         ru: {
@@ -1252,6 +1102,7 @@
         };
     }
 
+    // === СКИНЫ И АССЕТЫ ===
     const vseSkins = [
         { id: "knife", price: 0, file: "knife.png", speed: 35 * SPEED_MULTIPLIER, appleHitbox: 0.55, coinMult: 1, slow: 1, pierce: false, isGacha: false },
         { id: "pencil", price: 10, file: "pencil.png", speed: 55 * SPEED_MULTIPLIER, appleHitbox: 0.55, coinMult: 1, slow: 1, pierce: false, isGacha: false },
@@ -1263,6 +1114,10 @@
     ];
 
     function poluchitStatiSkina() { return vseSkins.find(s => s.id === vybrannyiSkinId) || vseSkins[0]; }
+
+    // Считаем ВСЕ ассеты: 10 фонов + 7 скинов + 5 звуков
+    totalAssets = 10 + vseSkins.length + Object.keys(audioFileList).length;
+    updatePreloader();
 
     const kartinkaYabloko = new Image(); kartinkaYabloko.src = "apple.png";
     const kartinkaBronya = new Image(); kartinkaBronya.src = "spike.png";
@@ -1276,34 +1131,22 @@
     const kartinkaGolem = new Image(); kartinkaGolem.src = "golem.png";
 
     const kartinkiOruzhiya = {};
-    const vsegoImages = 10 + vseSkins.length;
-    const vsegoAudio = Object.keys(audioFileList).length;
-    totalAssets = vsegoImages + vsegoAudio;
-
-    function proverkaZagr() {
-        loadedAssets++;
-        updatePreloader();
-        if (loadedAssets >= totalAssets) {
-            nastroikaEkrana();
-            lastTime = performance.now();
-            igrovoiCikl(lastTime);
-        }
-    }
 
     [kartinkaYabloko, kartinkaBronya, kartinkaMeteor, kartinkaSunduk, kartinkaArbuz,
      kartinkaBoss, kartinkaPizza, kartinkaBurger, kartinkaStump, kartinkaGolem].forEach(img => {
-        img.onload = proverkaZagr;
-        img.onerror = proverkaZagr;
+        img.onload = assetLoaded;
+        img.onerror = assetLoaded;
     });
 
     vseSkins.forEach(s => {
         const i = new Image();
         i.src = s.file;
-        i.onload = proverkaZagr;
-        i.onerror = proverkaZagr;
+        i.onload = assetLoaded;
+        i.onerror = assetLoaded;
         kartinkiOruzhiya[s.id] = i;
     });
 
+    // === ОБРАБОТЧИКИ КНОПОК ===
     if (knopkaIgrat) {
         knopkaIgrat.onclick = function() {
             unlockAudio();
@@ -1855,39 +1698,16 @@
         try { savedLang = localStorage.getItem('vk_snaiper_lang'); } catch (e) {}
         const detectedLang = PlatformAdapter.getLanguage();
         currentLang = (savedLang === 'ru' || savedLang === 'en') ? savedLang : detectedLang;
+        applyLanguage();
 
         PlatformAdapter.signalReady();
         nastroikaEkrana();
+        loadDataFromAdapter();
         loadAudioFiles();
 
-        // Показ экрана согласия при первом запуске (п. 1.1.4, 2.1.5)
-        if (isFirstLaunch()) {
-            setTimeout(() => {
-                hidePreloader();
-                showAgreementScreen();
-            }, 1000);
-        }
-
-        // Применение языка после загрузки
-        setTimeout(() => {
-            applyLanguage();
-            loadDataFromAdapter();
-            // Скрываем прелоадер если соглашение уже принято
-            if (!isFirstLaunch() && preloaderEl && !preloaderEl.classList.contains('hidden')) {
-                // Прелоадер скроется когда загрузятся все ассеты
-            }
-        }, 100);
+        // Защита от «вечной загрузки» (п. 2.2.2): если через 8 сек что-то не догрузилось — стартуем
+        setTimeout(finishLoading, 8000);
     }
-
-    // Переопределение proverkaZagr чтобы скрывать прелоадер по завершении
-    const originalProverkaZagr = proverkaZagr;
-    window._checkLoadComplete = function() {
-        if (loadedAssets >= totalAssets) {
-            if (!isFirstLaunch()) {
-                setTimeout(hidePreloader, 300);
-            }
-        }
-    };
 
     window.addEventListener("resize", forceResize);
     window.addEventListener("orientationchange", () => { setTimeout(forceResize, 100); });
