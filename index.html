@@ -87,7 +87,6 @@
             overflow: hidden;
             z-index: 10;
         }
-        /* === ПРЕЛОАДЕР === */
         #preloader {
             position: absolute;
             top: 0; left: 0;
@@ -131,7 +130,6 @@
             font-size: 16px;
             font-weight: bold;
         }
-        /* === ОСНОВНОЙ ИНТЕРФЕЙС === */
         #panelZvuka {
             position: absolute;
             top: 10px; left: 10px;
@@ -171,6 +169,32 @@
             border-radius: 50%;
             background: #4CAF50;
             cursor: pointer;
+        }
+        /* === КНОПКА ПАУЗЫ === */
+        #panelPauza {
+            position: absolute;
+            top: 10px; left: 50%;
+            margin-left: -20px;
+            width: 40px; height: 40px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            z-index: 100;
+            transform-origin: center top;
+        }
+        .knopkaPauzaOformlenie {
+            background: none; border: none;
+            color: white; font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0; margin: 0; outline: none;
         }
         #panelYazyka {
             position: absolute;
@@ -454,7 +478,6 @@
     <div class="game-wrapper">
         <div class="game-container" id="gameContainer">
             <canvas id="igrovoePole"></canvas>
-            <!-- ПРЕЛОАДЕР -->
             <div id="preloader">
                 <div class="preloader-title">ФРУКТОВЫЙ СНАЙПЕР</div>
                 <div class="preloader-bar-container">
@@ -466,6 +489,9 @@
                 <div id="panelZvuka">
                     <button id="knopkaZvuka" class="knopkaZvukaOformlenie" aria-label="Sound">🔊</button>
                     <input type="range" id="polzunokZvuka" min="0" max="1" step="0.1" value="0.4" aria-label="Volume">
+                </div>
+                <div id="panelPauza" class="skryto">
+                    <button id="knopkaPauza" class="knopkaPauzaOformlenie" aria-label="Pause">❚❚</button>
                 </div>
                 <div id="panelYazyka">
                     <button id="knopkaYazyka" class="knopkaYazykaOformlenie" aria-label="Language">🌐 RU</button>
@@ -497,6 +523,12 @@
                     <div id="setkaSkinov" class="setka"></div>
                     <button id="knopkaNazadIzMagazina" class="knopka">BACK TO MENU</button>
                 </div>
+                <div id="ekranPauzy" class="ekran popup-overlay popup-scale-target skryto">
+                    <h2 id="ui_pauseTitle">PAUSE</h2>
+                    <button id="knopkaProdolzit" class="knopka">CONTINUE</button>
+                    <button id="knopkaRestartPauza" class="knopka serya">RESTART</button>
+                    <button id="knopkaVMenyu" class="knopka knopkaMagazinaCvet">MAIN MENU</button>
+                </div>
                 <div id="popupNagrada" class="ekran popup-overlay popup-scale-target skryto">
                     <h2 id="ui_reward" style="color:white;">REWARD!</h2>
                     <h1 id="tekstNagrady" style="color: #FFD700; margin: 10px 0; font-size: 30px;">50 🍎</h1>
@@ -510,6 +542,7 @@
                         <span class="btn-text">CONTINUE<br><small>FOR VIDEO AD</small></span>
                     </button>
                     <button id="knopkaZanovo" class="knopka serya">RESTART</button>
+                    <button id="knopkaVMenyuGO" class="knopka knopkaMagazinaCvet">MAIN MENU</button>
                 </div>
             </div>
         </div>
@@ -544,7 +577,6 @@
                         console.warn('[VK] Cannot get user info:', e);
                     }
 
-                    // Обработка VKWebAppViewHide (п. 2.2.5)
                     if (vkBridge.subscribe) {
                         vkBridge.subscribe((event) => {
                             if (event.detail && event.detail.type === 'VKWebAppViewHide') {
@@ -647,6 +679,8 @@
             }
         },
 
+        // REWARDED: VK резолвит промис только когда реклама досмотрена до конца.
+        // Награда выдаётся в then(); при скипе/ошибке промис reject'ится — награды нет.
         async showRewarded(onOpen, onRewarded, onClose, onError) {
             if (this.platform !== 'vk' || !this.vkBridge) {
                 if (onOpen) onOpen();
@@ -656,12 +690,10 @@
                 }, 500);
                 return;
             }
+            if (onOpen) onOpen();
             try {
-                if (onOpen) onOpen();
-                const result = await this.vkBridge.send('VKWebAppShowRewardedAd', {});
-                if (result && result.result === true) {
-                    if (onRewarded) onRewarded();
-                }
+                await this.vkBridge.send('VKWebAppShowRewardedAd', {});
+                if (onRewarded) onRewarded();
                 if (onClose) onClose();
             } catch (e) {
                 console.warn('[VK] Rewarded error:', e);
@@ -685,7 +717,7 @@
     };
 
     // ============================================
-    // ПРЕЛОАДЕР (единая точка завершения загрузки)
+    // ПРЕЛОАДЕР
     // ============================================
     let loadedAssets = 0;
     let totalAssets = 0;
@@ -707,7 +739,6 @@
         if (preloaderEl) preloaderEl.classList.add('hidden');
     }
 
-    // ЕДИНСТВЕННАЯ точка старта игры: вызывается когда все ассеты готовы
     function finishLoading() {
         if (gameLoopStarted) return;
         gameLoopStarted = true;
@@ -717,7 +748,6 @@
         igrovoiCikl(lastTime);
     }
 
-    // Вызывается КАЖДЫМ ассетом (картинка ИЛИ звук, успех ИЛИ ошибка)
     function assetLoaded() {
         loadedAssets++;
         updatePreloader();
@@ -749,6 +779,14 @@
     const polzunokZvuka = document.getElementById("polzunokZvuka");
     const knopkaYazyka = document.getElementById("knopkaYazyka");
     const panelYazyka = document.getElementById("panelYazyka");
+
+    const panelPauza = document.getElementById("panelPauza");
+    const knopkaPauza = document.getElementById("knopkaPauza");
+    const ekranPauzy = document.getElementById("ekranPauzy");
+    const knopkaProdolzit = document.getElementById("knopkaProdolzit");
+    const knopkaRestartPauza = document.getElementById("knopkaRestartPauza");
+    const knopkaVMenyu = document.getElementById("knopkaVMenyu");
+    const knopkaVMenyuGO = document.getElementById("knopkaVMenyuGO");
 
     const uiPanelLevel = document.getElementById("panelLevel");
     const uiPanelNozhei = document.getElementById("panelNozhei");
@@ -788,6 +826,7 @@
     let krasnayaVspyshka = 0;
     let padayushiyNozh = null;
     let sostoyanieIgry = "MENU";
+    let pauzaAktivna = false;
 
     let monety = 0;
     let kuplyennyeSkins = ["knife"];
@@ -799,6 +838,20 @@
     }
     function resumeGameAfterAd() {
         if (masterGain) masterGain.gain.value = isMuted ? 0 : currentVolume;
+        if (sostoyanieIgry === "PAUSED" && !pauzaAktivna) sostoyanieIgry = "PLAY";
+    }
+
+    // === ПАУЗА / ВЫХОД В МЕНЮ ===
+    function otkrytPauzu() {
+        if (sostoyanieIgry !== "PLAY" || pauzaAktivna) return;
+        pauzaAktivna = true;
+        sostoyanieIgry = "PAUSED";
+        if (ekranPauzy) ekranPauzy.classList.remove("skryto");
+    }
+    function zakrytPauzu() {
+        if (!pauzaAktivna) return;
+        pauzaAktivna = false;
+        if (ekranPauzy) ekranPauzy.classList.add("skryto");
         if (sostoyanieIgry === "PAUSED") sostoyanieIgry = "PLAY";
     }
 
@@ -837,6 +890,11 @@
         } else {
             uiPanelLevel.classList.add("skryto");
             uiPanelNozhei.classList.add("skryto");
+        }
+        // Кнопка паузы видна только во время игры
+        if (panelPauza) {
+            if (sostoyanieIgry === "PLAY") panelPauza.classList.remove("skryto");
+            else panelPauza.classList.add("skryto");
         }
     }
 
@@ -977,7 +1035,6 @@
     function loadAudioFiles() {
         const audioCount = Object.keys(audioFileList).length;
         if (!initAudio()) {
-            // Нет WebAudio — считаем звуковые ассеты загруженными, чтобы игра стартовала
             for (let i = 0; i < audioCount; i++) assetLoaded();
             return;
         }
@@ -1046,6 +1103,7 @@
             continue: "ПРОДОЛЖИТЬ", forVideo: "ЗА ВИДЕО",
             restart: "НАЧАТЬ ЗАНОВО", boss: "БОСС!", knives: "Ножей:",
             equipped: "В РУКАХ", equip: "ВЗЯТЬ", legendaryReward: "КЛИНОК КОСМОСА!",
+            pause: "ПАУЗА", toMenu: "В ГЛАВНОЕ МЕНЮ",
             knife: "Нож", pencil: "Карандаш", sword: "Меч",
             shuriken: "Сюрикен", axe: "Топор", wand: "Посох",
             legendary: "Легендарный Клинок"
@@ -1059,6 +1117,7 @@
             continue: "CONTINUE", forVideo: "FOR VIDEO AD",
             restart: "RESTART", boss: "BOSS!", knives: "Knives:",
             equipped: "EQUIPPED", equip: "EQUIP", legendaryReward: "COSMIC BLADE!",
+            pause: "PAUSE", toMenu: "MAIN MENU",
             knife: "Knife", pencil: "Pencil", sword: "Sword",
             shuriken: "Shuriken", axe: "Axe", wand: "Wand",
             legendary: "Legendary Blade"
@@ -1089,6 +1148,11 @@
         if (el("ui_lvl_text")) el("ui_lvl_text").innerText = t("level");
         if (el("knopkaVoskresheniya")) el("knopkaVoskresheniya").innerHTML = `<span class="btn-icon">🎬</span><span class="btn-text">${t("continue")}<br><small>${t("forVideo")}</small></span>`;
         if (el("knopkaZanovo")) el("knopkaZanovo").innerText = t("restart");
+        if (el("ui_pauseTitle")) el("ui_pauseTitle").innerText = t("pause");
+        if (el("knopkaProdolzit")) el("knopkaProdolzit").innerText = t("continue");
+        if (el("knopkaRestartPauza")) el("knopkaRestartPauza").innerText = t("restart");
+        if (el("knopkaVMenyu")) el("knopkaVMenyu").innerText = t("toMenu");
+        if (el("knopkaVMenyuGO")) el("knopkaVMenyuGO").innerText = t("toMenu");
         obnovitKnopkuYazyka();
         updateHUD();
         otrisovatMagazin();
@@ -1115,7 +1179,6 @@
 
     function poluchitStatiSkina() { return vseSkins.find(s => s.id === vybrannyiSkinId) || vseSkins[0]; }
 
-    // Считаем ВСЕ ассеты: 10 фонов + 7 скинов + 5 звуков
     totalAssets = 10 + vseSkins.length + Object.keys(audioFileList).length;
     updatePreloader();
 
@@ -1166,6 +1229,15 @@
             if (uiGlavnoeMenu) uiGlavnoeMenu.classList.remove("skryto");
         };
     }
+
+    // Пауза и выход в меню
+    if (knopkaPauza) knopkaPauza.onclick = otkrytPauzu;
+    if (knopkaProdolzit) knopkaProdolzit.onclick = zakrytPauzu;
+    if (knopkaRestartPauza) knopkaRestartPauza.onclick = function() { zakrytPauzu(); sbrosIgry(); };
+    if (knopkaVMenyu) knopkaVMenyu.onclick = function() { zakrytPauzu(); vozvratVMenyu(); };
+    if (knopkaVMenyuGO) knopkaVMenyuGO.onclick = function() { vozvratVMenyu(); };
+    // RESTART на экране поражения = честный рестарт без рекламы
+    if (knopkaZanovo) knopkaZanovo.onclick = function() { sbrosIgry(); };
 
     function dobavitMonety(k) {
         monety += k;
@@ -1286,16 +1358,6 @@
         }
     }
 
-    if (knopkaZanovo) {
-        knopkaZanovo.onclick = function() {
-            PlatformAdapter.showInterstitial(
-                pauseGameForAd,
-                () => { resumeGameAfterAd(); vozvratVMenyu(); },
-                () => { resumeGameAfterAd(); vozvratVMenyu(); }
-            );
-        };
-    }
-
     if (knopkaVoskresheniya) {
         knopkaVoskresheniya.onclick = function() {
             PlatformAdapter.showRewarded(
@@ -1319,7 +1381,9 @@
 
     function vozvratVMenyu() {
         sostoyanieIgry = "MENU";
+        pauzaAktivna = false;
         if (uiEkranProigrysha) uiEkranProigrysha.classList.add("skryto");
+        if (ekranPauzy) ekranPauzy.classList.add("skryto");
         if (uiGlavnoeMenu) uiGlavnoeMenu.classList.remove("skryto");
         if (uiPanelMonet) uiPanelMonet.classList.remove("skryto");
         vteknutieNozhi = [];
@@ -1342,7 +1406,9 @@
     function handleInput(e) {
         const tgt = e.target;
         if (tgt.id === "polzunokZvuka" || tgt.id === "knopkaZvuka" || tgt.id === "knopkaYazyka" ||
-            tgt.closest('.knopka') || tgt.closest('#panelZvuka') || tgt.closest('#panelYazyka')) return;
+            tgt.id === "knopkaPauza" ||
+            tgt.closest('.knopka') || tgt.closest('#panelZvuka') ||
+            tgt.closest('#panelYazyka') || tgt.closest('#panelPauza')) return;
         if (e.type === 'touchstart' || e.type === 'mousedown') {
             e.preventDefault();
             sdelatBrosok();
@@ -1358,6 +1424,10 @@
         if (e.code === "Space" || e.code === "KeyW" || e.code === "ArrowUp") {
             if (e.code === "Space") e.preventDefault();
             sdelatBrosok();
+        }
+        if (e.code === "Escape") {
+            if (pauzaAktivna) zakrytPauzu();
+            else otkrytPauzu();
         }
     });
 
@@ -1375,6 +1445,8 @@
         nozh.y = startNozhY;
         nozh.letit = false;
         fazaDvizheniya = 0;
+        pauzaAktivna = false;
+        if (ekranPauzy) ekranPauzy.classList.add("skryto");
         if (arbuz) arbuz.y = arbuz.bazi_Y;
         meteor.aktiven = false;
         meteor.skorost = 0.04 * SPEED_MULTIPLIER;
@@ -1450,6 +1522,7 @@
             meteor.aktiven = false;
         }
         updateHUD();
+        // Interstitial только между уровнями (естественная пауза)
         PlatformAdapter.showInterstitial(pauseGameForAd, resumeGameAfterAd, resumeGameAfterAd);
     }
 
@@ -1705,7 +1778,6 @@
         loadDataFromAdapter();
         loadAudioFiles();
 
-        // Защита от «вечной загрузки» (п. 2.2.2): если через 8 сек что-то не догрузилось — стартуем
         setTimeout(finishLoading, 8000);
     }
 
