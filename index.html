@@ -7,7 +7,7 @@
     <meta property="og:title" content="Фруктовый Снайпер">
     <meta name="vk-game-title" content="Фруктовый Снайпер">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+    <!-- ВАЖНО: НЕТ блокирующего script src в head. VK Bridge грузится динамически в JS. -->
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -170,7 +170,6 @@
             background: #4CAF50;
             cursor: pointer;
         }
-        /* === КНОПКА ПАУЗЫ === */
         #panelPauza {
             position: absolute;
             top: 10px; left: 50%;
@@ -553,6 +552,33 @@
     'use strict';
 
     // ============================================
+    // НЕБЛОКИРУЮЩАЯ ЗАГРУЗКА VK BRIDGE (2 зеркала + таймаут)
+    // ============================================
+    function loadVkBridge(callback) {
+        const urls = [
+            'https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js',
+            'https://cdn.jsdelivr.net/npm/@vkontakte/vk-bridge/dist/browser.min.js'
+        ];
+        let idx = 0;
+        let done = false;
+        function tryNext() {
+            if (done) return;
+            if (idx >= urls.length) { done = true; callback(false); return; }
+            const s = document.createElement('script');
+            s.src = urls[idx];
+            s.async = true;
+            const to = setTimeout(() => {
+                s.onload = null; s.onerror = null;
+                idx++; tryNext();
+            }, 4000);
+            s.onload = () => { clearTimeout(to); if (!done) { done = true; callback(true); } };
+            s.onerror = () => { clearTimeout(to); idx++; tryNext(); };
+            document.head.appendChild(s);
+        }
+        tryNext();
+    }
+
+    // ============================================
     // PLATFORM ADAPTER — VK Bridge
     // ============================================
     const PlatformAdapter = {
@@ -679,8 +705,6 @@
             }
         },
 
-        // REWARDED: VK резолвит промис только когда реклама досмотрена до конца.
-        // Награда выдаётся в then(); при скипе/ошибке промис reject'ится — награды нет.
         async showRewarded(onOpen, onRewarded, onClose, onError) {
             if (this.platform !== 'vk' || !this.vkBridge) {
                 if (onOpen) onOpen();
@@ -841,7 +865,6 @@
         if (sostoyanieIgry === "PAUSED" && !pauzaAktivna) sostoyanieIgry = "PLAY";
     }
 
-    // === ПАУЗА / ВЫХОД В МЕНЮ ===
     function otkrytPauzu() {
         if (sostoyanieIgry !== "PLAY" || pauzaAktivna) return;
         pauzaAktivna = true;
@@ -891,7 +914,6 @@
             uiPanelLevel.classList.add("skryto");
             uiPanelNozhei.classList.add("skryto");
         }
-        // Кнопка паузы видна только во время игры
         if (panelPauza) {
             if (sostoyanieIgry === "PLAY") panelPauza.classList.remove("skryto");
             else panelPauza.classList.add("skryto");
@@ -1146,7 +1168,7 @@
         if (el("ui_claim")) el("ui_claim").innerText = t("claim");
         if (el("ui_gameover")) el("ui_gameover").innerText = t("gameover");
         if (el("ui_lvl_text")) el("ui_lvl_text").innerText = t("level");
-        if (el("knopkaVoskresheniya")) el("knopkaVoskresheniya").innerHTML = `<span class="btn-icon">🎬</span><span class="btn-text">${t("continue")}<br><small>${t("forVideo")}</small></span>`;
+        if (el("knopkaVoskresheniya")) el("knopkaVoskresheniya").innerHTML = '<span class="btn-icon">🎬</span><span class="btn-text">' + t("continue") + '<br><small>' + t("forVideo") + '</small></span>';
         if (el("knopkaZanovo")) el("knopkaZanovo").innerText = t("restart");
         if (el("ui_pauseTitle")) el("ui_pauseTitle").innerText = t("pause");
         if (el("knopkaProdolzit")) el("knopkaProdolzit").innerText = t("continue");
@@ -1230,13 +1252,11 @@
         };
     }
 
-    // Пауза и выход в меню
     if (knopkaPauza) knopkaPauza.onclick = otkrytPauzu;
     if (knopkaProdolzit) knopkaProdolzit.onclick = zakrytPauzu;
     if (knopkaRestartPauza) knopkaRestartPauza.onclick = function() { zakrytPauzu(); sbrosIgry(); };
     if (knopkaVMenyu) knopkaVMenyu.onclick = function() { zakrytPauzu(); vozvratVMenyu(); };
     if (knopkaVMenyuGO) knopkaVMenyuGO.onclick = function() { vozvratVMenyu(); };
-    // RESTART на экране поражения = честный рестарт без рекламы
     if (knopkaZanovo) knopkaZanovo.onclick = function() { sbrosIgry(); };
 
     function dobavitMonety(k) {
@@ -1326,12 +1346,12 @@
             const eq = (vybrannyiSkinId === s.id);
             let bh = "";
             if (eq) {
-                bh = `<button class="MknopkaVybrano" disabled>${t("equipped")}</button>`;
+                bh = '<button class="MknopkaVybrano" disabled>' + t("equipped") + '</button>';
             } else if (ok) {
-                bh = `<button class="MknopkaVybrat" onclick="window._game.vybratSkin('${s.id}')">${t("equip")}</button>`;
+                bh = '<button class="MknopkaVybrat" onclick="window._game.vybratSkin(\'' + s.id + '\')">' + t("equip") + '</button>';
             } else {
                 const can = monety >= s.price;
-                bh = `<button class="${can ? "MknopkaKupit" : "MknopkaKupit serya"}" onclick="window._game.kupitSkin('${s.id}')" ${!can ? "disabled" : ""}>${s.price} 🍎</button>`;
+                bh = '<button class="' + (can ? "MknopkaKupit" : "MknopkaKupit serya") + '" onclick="window._game.kupitSkin(\'' + s.id + '\')" ' + (!can ? "disabled" : "") + '>' + s.price + ' 🍎</button>';
             }
             const skinName = t(s.id);
             let desc = "";
@@ -1343,12 +1363,12 @@
             else if (s.id === "wand") desc = currentLang === 'ru' ? "Замедляет время" : "Slows down time";
             else if (s.id === "legendary") desc = currentLang === 'ru' ? "x" + s.coinMult + " монет, пробитие и замедление" : "x" + s.coinMult + " coins, pierce & slow";
             else desc = currentLang === 'ru' ? "Обычный" : "Common";
-            h += `<div class="${s.isGacha ? "kartochkaSkina legendary" : "kartochkaSkina"}">
-                <img src="${s.file}" alt="${skinName}">
-                <div class="nazvanieSkina">${skinName}</div>
-                <div class="opisanieSkina">${desc}</div>
-                ${bh}
-            </div>`;
+            h += '<div class="' + (s.isGacha ? "kartochkaSkina legendary" : "kartochkaSkina") + '">' +
+                '<img src="' + s.file + '" alt="' + skinName + '">' +
+                '<div class="nazvanieSkina">' + skinName + '</div>' +
+                '<div class="opisanieSkina">' + desc + '</div>' +
+                bh +
+                '</div>';
         });
         uiSetkaSkinov.innerHTML = h;
         const b = document.getElementById("knopkaSunduk");
@@ -1522,7 +1542,6 @@
             meteor.aktiven = false;
         }
         updateHUD();
-        // Interstitial только между уровнями (естественная пауза)
         PlatformAdapter.showInterstitial(pauseGameForAd, resumeGameAfterAd, resumeGameAfterAd);
     }
 
@@ -1757,7 +1776,7 @@
         kist.restore();
 
         if (krasnayaVspyshka > 0) {
-            kist.fillStyle = `rgba(255,0,0,${krasnayaVspyshka})`;
+            kist.fillStyle = 'rgba(255,0,0,' + krasnayaVspyshka + ')';
             kist.fillRect(0, 0, holst.width, holst.height);
             krasnayaVspyshka -= 0.02 * deltaTime * 60;
         }
@@ -1765,6 +1784,10 @@
 
     // === ЗАПУСК ===
     async function initGame() {
+        // Неблокирующе грузим VK Bridge, затем инициируем адаптер
+        await new Promise(resolve => {
+            loadVkBridge(() => resolve());
+        });
         await PlatformAdapter.init();
 
         let savedLang = null;
