@@ -705,8 +705,11 @@
             }
         },
 
+        // REWARDED: исправлено — анти-зависание + веб-фолбэк
         async showRewarded(onOpen, onRewarded, onClose, onError) {
+            // WEB-режим (нет VK Bridge): фолбэк, возрождаем сразу
             if (this.platform !== 'vk' || !this.vkBridge) {
+                console.log('[VK] Rewarded: web-mode fallback');
                 if (onOpen) onOpen();
                 setTimeout(() => {
                     if (onRewarded) onRewarded();
@@ -714,15 +717,36 @@
                 }, 500);
                 return;
             }
+
             if (onOpen) onOpen();
-            try {
-                await this.vkBridge.send('VKWebAppShowRewardedAd', {});
+
+            let settled = false;
+            const finishOk = () => {
+                if (settled) return;
+                settled = true;
+                console.log('[VK] Rewarded: success, grant reward');
                 if (onRewarded) onRewarded();
                 if (onClose) onClose();
-            } catch (e) {
-                console.warn('[VK] Rewarded error:', e);
+            };
+            const finishFail = (reason) => {
+                if (settled) return;
+                settled = true;
+                console.warn('[VK] Rewarded: failed →', reason);
                 if (onError) onError();
                 if (onClose) onClose();
+            };
+
+            // Страховка от зависания: 45 сек дольше любого ролика
+            const hangTimer = setTimeout(() => finishFail('hang-timeout'), 45000);
+
+            try {
+                await this.vkBridge.send('VKWebAppShowRewardedAd', {});
+                clearTimeout(hangTimer);
+                // VK резолвит только когда ролик досмотрен до конца
+                finishOk();
+            } catch (e) {
+                clearTimeout(hangTimer);
+                finishFail(e && e.message ? e.message : 'reject');
             }
         },
 
@@ -895,9 +919,9 @@
         menus.forEach(menu => {
             if (menu.classList.contains('skryto')) return;
             if (menu.classList.contains('popup-overlay')) {
-                menu.style.transform = `translate(-50%, -50%) scale(${menuScale})`;
+                menu.style.transform = 'translate(-50%, -50%) scale(' + menuScale + ')';
             } else {
-                menu.style.transform = `scale(${menuScale})`;
+                menu.style.transform = 'scale(' + menuScale + ')';
             }
         });
     }
@@ -956,7 +980,7 @@
                 const newSize = Math.max(10, 24 * uiScale);
                 el.style.fontSize = newSize + 'px';
                 const shadowSize = Math.max(1, 2 * uiScale);
-                el.style.textShadow = `${shadowSize}px ${shadowSize}px ${shadowSize * 2}px #000000`;
+                el.style.textShadow = shadowSize + 'px ' + shadowSize + 'px ' + (shadowSize * 2) + 'px #000000';
             }
         });
         if (uiPanelMonet) {
@@ -973,16 +997,16 @@
         const slider = document.getElementById('panelZvuka');
         if (slider) {
             const scale = Math.min(globalScale, 0.8);
-            slider.style.transform = `translate(${15 * scale}px, ${50 * scale}px) scale(${scale})`;
+            slider.style.transform = 'translate(' + (15 * scale) + 'px, ' + (50 * scale) + 'px) scale(' + scale + ')';
         }
         const monet = document.getElementById('panelMonet');
         if (monet) {
             const scale = Math.min(globalScale, 0.8);
-            monet.style.transform = `translate(${-15 * scale}px, ${50 * scale}px) scale(${scale})`;
+            monet.style.transform = 'translate(' + (-15 * scale) + 'px, ' + (50 * scale) + 'px) scale(' + scale + ')';
         }
         if (panelYazyka) {
             const scale = Math.max(0.6, Math.min(globalScale, 1));
-            panelYazyka.style.transform = `scale(${scale})`;
+            panelYazyka.style.transform = 'scale(' + scale + ')';
         }
 
         updateHUD();
@@ -1784,7 +1808,6 @@
 
     // === ЗАПУСК ===
     async function initGame() {
-        // Неблокирующе грузим VK Bridge, затем инициируем адаптер
         await new Promise(resolve => {
             loadVkBridge(() => resolve());
         });
