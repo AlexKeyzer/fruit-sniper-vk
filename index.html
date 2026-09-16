@@ -7,7 +7,6 @@
     <meta property="og:title" content="Фруктовый Снайпер">
     <meta name="vk-game-title" content="Фруктовый Снайпер">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <!-- ВАЖНО: НЕТ блокирующего script src в head. VK Bridge грузится динамически в JS. -->
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -552,9 +551,27 @@
     'use strict';
 
     // ============================================
+    // ОПРЕДЕЛЕНИЕ: мы реально внутри VK?
+    // (по launch-параметрам VK или referrer, а НЕ по факту загрузки bridge)
+    // ============================================
+    function isInsideVk() {
+        try {
+            var params = new URLSearchParams(window.location.search);
+            if (params.has('vk_app_id') || params.has('vk_user_id')) return true;
+            var ref = document.referrer || '';
+            if (ref.indexOf('vk.com') !== -1 || ref.indexOf('vk.ru') !== -1) return true;
+            return false;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // ============================================
     // НЕБЛОКИРУЮЩАЯ ЗАГРУЗКА VK BRIDGE (2 зеркала + таймаут)
     // ============================================
     function loadVkBridge(callback) {
+        // Вне VK bridge не нужен вообще — не грузим, чтобы не было ложного "vk"-режима
+        if (!isInsideVk()) { callback(false); return; }
         const urls = [
             'https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js',
             'https://cdn.jsdelivr.net/npm/@vkontakte/vk-bridge/dist/browser.min.js'
@@ -590,7 +607,7 @@
 
         async init() {
             try {
-                if (typeof vkBridge !== 'undefined' && vkBridge) {
+                if (isInsideVk() && typeof vkBridge !== 'undefined' && vkBridge) {
                     await vkBridge.send('VKWebAppInit');
                     this.platform = 'vk';
                     this.vkBridge = vkBridge;
@@ -611,7 +628,7 @@
                         });
                     }
                 } else {
-                    console.log('[VK] Bridge not found, using web mode');
+                    console.log('[VK] Not inside VK → web mode');
                     this.platform = 'web';
                 }
             } catch (e) {
@@ -705,16 +722,16 @@
             }
         },
 
-        // REWARDED: исправлено — анти-зависание + веб-фолбэк
+        // REWARDED: веб-фолбэк + анти-зависание
         async showRewarded(onOpen, onRewarded, onClose, onError) {
-            // WEB-режим (нет VK Bridge): фолбэк, возрождаем сразу
+            // WEB-режим (вне VK): возрождаем сразу, без рекламы
             if (this.platform !== 'vk' || !this.vkBridge) {
-                console.log('[VK] Rewarded: web-mode fallback');
+                console.log('[VK] Rewarded: web-mode fallback (grant)');
                 if (onOpen) onOpen();
                 setTimeout(() => {
                     if (onRewarded) onRewarded();
                     if (onClose) onClose();
-                }, 500);
+                }, 400);
                 return;
             }
 
@@ -736,13 +753,11 @@
                 if (onClose) onClose();
             };
 
-            // Страховка от зависания: 45 сек дольше любого ролика
             const hangTimer = setTimeout(() => finishFail('hang-timeout'), 45000);
 
             try {
                 await this.vkBridge.send('VKWebAppShowRewardedAd', {});
                 clearTimeout(hangTimer);
-                // VK резолвит только когда ролик досмотрен до конца
                 finishOk();
             } catch (e) {
                 clearTimeout(hangTimer);
@@ -817,6 +832,7 @@
     const uiEkranMagazina = document.getElementById("ekranMagazina");
     const uiSetkaSkinov = document.getElementById("setkaSkinov");
     const uiTekushiyUroven = document.getElementById("tekushiyUrovenUI");
+    const uiPopupNagrada = document.getElementById("popupNagrada");
 
     const knopkaIgrat = document.getElementById("knopkaIgrat");
     const knopkaZanovo = document.getElementById("knopkaZanovo");
@@ -1330,14 +1346,12 @@
             playSnd("win");
             const tx = document.getElementById("tekstNagrady");
             if (tx) tx.innerText = nag;
-            const pp = document.getElementById("popupNagrada");
-            if (pp) pp.classList.remove("skryto");
+            if (uiPopupNagrada) uiPopupNagrada.classList.remove("skryto");
         }, 800);
     };
 
     window._game.zakrytPopup = function() {
-        const p = document.getElementById("popupNagrada");
-        if (p) p.classList.add("skryto");
+        if (uiPopupNagrada) uiPopupNagrada.classList.add("skryto");
         otrisovatMagazin();
     };
 
@@ -1428,6 +1442,7 @@
         pauzaAktivna = false;
         if (uiEkranProigrysha) uiEkranProigrysha.classList.add("skryto");
         if (ekranPauzy) ekranPauzy.classList.add("skryto");
+        if (uiPopupNagrada) uiPopupNagrada.classList.add("skryto");
         if (uiGlavnoeMenu) uiGlavnoeMenu.classList.remove("skryto");
         if (uiPanelMonet) uiPanelMonet.classList.remove("skryto");
         vteknutieNozhi = [];
@@ -1475,6 +1490,7 @@
         }
     });
 
+    // СБРОС: теперь прячет ВСЕ оверлеи (фикс бага «меню не уходит»)
     function sbrosIgry() {
         uroven = 1;
         nozhiDlyaPobedy = 5;
@@ -1491,6 +1507,8 @@
         fazaDvizheniya = 0;
         pauzaAktivna = false;
         if (ekranPauzy) ekranPauzy.classList.add("skryto");
+        if (uiEkranProigrysha) uiEkranProigrysha.classList.add("skryto");
+        if (uiPopupNagrada) uiPopupNagrada.classList.add("skryto");
         if (arbuz) arbuz.y = arbuz.bazi_Y;
         meteor.aktiven = false;
         meteor.skorost = 0.04 * SPEED_MULTIPLIER;
