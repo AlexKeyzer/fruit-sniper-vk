@@ -645,7 +645,7 @@
                         console.log('[VK] Bridge initialized');
                         return vkBridge.send('VKWebAppGetUserInfo');
                     }).then(function(user) {
-                        self.userId = user.id;
+                        if (user) self.userId = user.id;
                     }).catch(function(e) {
                         console.warn('[VK] Init warning:', e);
                         if (self.platform !== 'vk') {
@@ -691,9 +691,8 @@
             console.log('[VK] Ads preloaded (interstitial + reward)');
         },
 
-        // ПРОВЕРКА наличия готовой rewarded-рекламы
+        // ПРОВЕРКА готовности rewarded-материалов (обязательна по документации)
         checkRewardAds: function() {
-            var self = this;
             if (this.platform !== 'vk' || !this.vkBridge) return Promise.resolve(false);
             return this.vkBridge.send('VKWebAppCheckNativeAds', { ad_format: 'reward' })
                 .then(function(data) { return !!(data && data.result); })
@@ -754,14 +753,13 @@
             }
         },
 
-        // МЕЖСТРАНИЧНАЯ РЕКЛАМА (между уровнями) — правильный метод
+        // МЕЖСТРАНИЧНАЯ РЕКЛАМА (между уровнями)
         showInterstitial: function(onOpen, onClose, onError) {
             var self = this;
             var now = Date.now();
             var allowed = (now - this.sessionStartTime >= 120000) &&
                           (now - this.lastInterstitialTime >= 180000);
             if (!allowed) {
-                adToast('Interstitial: слишком рано (минимум 2 мин после старта, 3 мин между показами)');
                 if (onClose) onClose();
                 return;
             }
@@ -790,32 +788,51 @@
                 });
         },
 
-        // REWARDED РЕКЛАМА — правильный метод по документации VK
+        // REWARDED: сначала Check, потом Show, иначе мягкий фолбэк (без client_error)
         showRewarded: function(onOpen, onRewarded, onClose, onError) {
             var self = this;
-            // Вне ВКонтакте — фолбэк: возрождаем без ролика
+            // Вне ВКонтакте — сразу фолбэк
             if (this.platform !== 'vk' || !this.vkBridge) {
-                adToast('Вне ВКонтакте: реклама не показывается (fallback-возрождение)');
+                adToast('Вне ВКонтакте: возрождение без ролика');
                 if (onOpen) onOpen();
-                setTimeout(function() {
-                    if (onRewarded) onRewarded();
-                    if (onClose) onClose();
-                }, 400);
+                setTimeout(function() { if (onRewarded) onRewarded(); if (onClose) onClose(); }, 400);
                 return;
             }
+            // 1) Проверяем, готовы ли материалы
+            this.vkBridge.send('VKWebAppCheckNativeAds', { ad_format: 'reward' })
+                .then(function(checkData) {
+                    if (checkData && checkData.result) {
+                        // материалы готовы — реально показываем ролик
+                        self._doShowRewarded(onOpen, onRewarded, onClose, onError);
+                    } else {
+                        // материалов нет — НЕ дёргаем Show (иначе client_error),
+                        // мягко возрождаем без ролика, чтобы кнопка всегда работала
+                        adToast('Рекламные материалы не готовы → возрождение без ролика');
+                        if (onOpen) onOpen();
+                        setTimeout(function() { if (onRewarded) onRewarded(); if (onClose) onClose(); }, 300);
+                    }
+                })
+                .catch(function() {
+                    adToast('Check недоступен → возрождение без ролика');
+                    if (onOpen) onOpen();
+                    setTimeout(function() { if (onRewarded) onRewarded(); if (onClose) onClose(); }, 300);
+                });
+        },
+
+        // Непосредственно показ rewarded-ролика (только когда Check=true)
+        _doShowRewarded: function(onOpen, onRewarded, onClose, onError) {
+            var self = this;
             if (onOpen) onOpen();
             var settled = false;
             var finishOk = function() {
-                if (settled) return;
-                settled = true;
+                if (settled) return; settled = true;
                 adToast('Rewarded: досмотрено → награда выдана');
                 if (onRewarded) onRewarded();
                 if (onClose) onClose();
                 self.preloadAds();
             };
             var finishFail = function(reason) {
-                if (settled) return;
-                settled = true;
+                if (settled) return; settled = true;
                 adToast('Rewarded ошибка: ' + reason);
                 if (onError) onError();
                 if (onClose) onClose();
