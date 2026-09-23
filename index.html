@@ -129,6 +129,23 @@
             font-size: 16px;
             font-weight: bold;
         }
+        #adToast {
+            position: absolute;
+            left: 50%; bottom: 60px;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.9);
+            color: #FFD700;
+            font: bold 12px Arial, sans-serif;
+            padding: 8px 14px;
+            border-radius: 10px;
+            z-index: 9000;
+            pointer-events: none;
+            max-width: 85%;
+            text-align: center;
+            display: none;
+            border: 1px solid #FFD700;
+        }
+        #adToast.show { display: block; }
         #panelZvuka {
             position: absolute;
             top: 10px; left: 10px;
@@ -483,6 +500,7 @@
                 </div>
                 <div class="preloader-percent" id="preloaderPercent">0%</div>
             </div>
+            <div id="adToast"></div>
             <div id="interfeis">
                 <div id="panelZvuka">
                     <button id="knopkaZvuka" class="knopkaZvukaOformlenie" aria-label="Sound">🔊</button>
@@ -552,7 +570,6 @@
 
     // ============================================
     // ОПРЕДЕЛЕНИЕ: мы реально внутри VK?
-    // (по launch-параметрам VK или referrer, а НЕ по факту загрузки bridge)
     // ============================================
     function isInsideVk() {
         try {
@@ -570,85 +587,120 @@
     // НЕБЛОКИРУЮЩАЯ ЗАГРУЗКА VK BRIDGE (2 зеркала + таймаут)
     // ============================================
     function loadVkBridge(callback) {
-        // Вне VK bridge не нужен вообще — не грузим, чтобы не было ложного "vk"-режима
         if (!isInsideVk()) { callback(false); return; }
-        const urls = [
+        var urls = [
             'https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js',
             'https://cdn.jsdelivr.net/npm/@vkontakte/vk-bridge/dist/browser.min.js'
         ];
-        let idx = 0;
-        let done = false;
+        var idx = 0;
+        var done = false;
         function tryNext() {
             if (done) return;
             if (idx >= urls.length) { done = true; callback(false); return; }
-            const s = document.createElement('script');
+            var s = document.createElement('script');
             s.src = urls[idx];
             s.async = true;
-            const to = setTimeout(() => {
+            var to = setTimeout(function() {
                 s.onload = null; s.onerror = null;
                 idx++; tryNext();
             }, 4000);
-            s.onload = () => { clearTimeout(to); if (!done) { done = true; callback(true); } };
-            s.onerror = () => { clearTimeout(to); idx++; tryNext(); };
+            s.onload = function() { clearTimeout(to); if (!done) { done = true; callback(true); } };
+            s.onerror = function() { clearTimeout(to); idx++; tryNext(); };
             document.head.appendChild(s);
         }
         tryNext();
     }
 
     // ============================================
-    // PLATFORM ADAPTER — VK Bridge
+    // ДИАГНОСТИКА: плашка с сообщениями о рекламе
     // ============================================
-    const PlatformAdapter = {
+    var adToastTimer = null;
+    function adToast(msg) {
+        var el = document.getElementById('adToast');
+        if (!el) return;
+        el.textContent = msg;
+        el.classList.add('show');
+        if (adToastTimer) clearTimeout(adToastTimer);
+        adToastTimer = setTimeout(function() { el.classList.remove('show'); }, 4000);
+        console.log('[AD]', msg);
+    }
+
+    // ============================================
+    // PLATFORM ADAPTER — VK Bridge (по документации VK)
+    // ============================================
+    var PlatformAdapter = {
         platform: 'web',
         vkBridge: null,
         sessionStartTime: Date.now(),
         lastInterstitialTime: 0,
         userId: null,
 
-        async init() {
-            try {
+        init: function() {
+            var self = this;
+            return new Promise(function(resolve) {
                 if (isInsideVk() && typeof vkBridge !== 'undefined' && vkBridge) {
-                    await vkBridge.send('VKWebAppInit');
-                    this.platform = 'vk';
-                    this.vkBridge = vkBridge;
-                    console.log('[VK] Bridge initialized');
+                    vkBridge.send('VKWebAppInit').then(function() {
+                        self.platform = 'vk';
+                        self.vkBridge = vkBridge;
+                        console.log('[VK] Bridge initialized');
+                        return vkBridge.send('VKWebAppGetUserInfo');
+                    }).then(function(user) {
+                        self.userId = user.id;
+                    }).catch(function(e) {
+                        console.warn('[VK] Init warning:', e);
+                        if (self.platform !== 'vk') {
+                            self.platform = 'vk';
+                            self.vkBridge = vkBridge;
+                        }
+                    });
 
-                    try {
-                        const user = await vkBridge.send('VKWebAppGetUserInfo');
-                        this.userId = user.id;
-                    } catch (e) {
-                        console.warn('[VK] Cannot get user info:', e);
-                    }
-
-                    if (vkBridge.subscribe) {
-                        vkBridge.subscribe((event) => {
-                            if (event.detail && event.detail.type === 'VKWebAppViewHide') {
-                                pauseGameForAd();
-                            }
-                        });
-                    }
+                    setTimeout(function() {
+                        if (self.vkBridge && self.vkBridge.subscribe) {
+                            self.vkBridge.subscribe(function(event) {
+                                if (event.detail && event.detail.type === 'VKWebAppViewHide') {
+                                    pauseGameForAd();
+                                }
+                            });
+                        }
+                        resolve();
+                    }, 100);
                 } else {
                     console.log('[VK] Not inside VK → web mode');
-                    this.platform = 'web';
+                    self.platform = 'web';
+                    resolve();
                 }
-            } catch (e) {
-                console.error('[VK] Init error:', e);
-                this.platform = 'web';
-            }
+            });
         },
 
-        signalReady() {
+        signalReady: function() {
             if (this.platform === 'vk' && this.vkBridge) {
                 try {
                     this.vkBridge.send('VKWebAppSetViewSettings', {
                         status_bar_style: 'dark',
                         action_bar_color: '#000000'
-                    }).catch(() => {});
+                    }).catch(function() {});
                 } catch (e) {}
             }
         },
 
-        async saveData(data) {
+        // ПРЕДЗАГРУЗКА рекламы (фон, без задержек при показе)
+        preloadAds: function() {
+            if (this.platform !== 'vk' || !this.vkBridge) return;
+            this.vkBridge.send('VKWebAppCheckNativeAds', { ad_format: 'interstitial' }).catch(function() {});
+            this.vkBridge.send('VKWebAppCheckNativeAds', { ad_format: 'reward' }).catch(function() {});
+            console.log('[VK] Ads preloaded (interstitial + reward)');
+        },
+
+        // ПРОВЕРКА наличия готовой rewarded-рекламы
+        checkRewardAds: function() {
+            var self = this;
+            if (this.platform !== 'vk' || !this.vkBridge) return Promise.resolve(false);
+            return this.vkBridge.send('VKWebAppCheckNativeAds', { ad_format: 'reward' })
+                .then(function(data) { return !!(data && data.result); })
+                .catch(function() { return false; });
+        },
+
+        saveData: function(data) {
             try {
                 localStorage.setItem('vk_snaiper_monety', String(data.monety));
                 localStorage.setItem('vk_snaiper_skins', JSON.stringify(data.skins));
@@ -656,34 +708,42 @@
                 localStorage.setItem('vk_snaiper_volume', String(data.volume));
                 localStorage.setItem('vk_snaiper_muted', data.muted ? '1' : '0');
                 if (this.platform === 'vk' && this.vkBridge) {
-                    await this.vkBridge.send('VKWebAppStorageSet', {
+                    this.vkBridge.send('VKWebAppStorageSet', {
                         key: 'vk_snaiper_save',
                         value: JSON.stringify(data)
-                    }).catch(() => {});
+                    }).catch(function() {});
                 }
             } catch (e) {
                 console.warn('[VK] Save error:', e);
             }
         },
 
-        async loadData() {
-            try {
-                if (this.platform === 'vk' && this.vkBridge) {
-                    const result = await this.vkBridge.send('VKWebAppStorageGet', {
+        loadData: function() {
+            var self = this;
+            return new Promise(function(resolve) {
+                if (self.platform === 'vk' && self.vkBridge) {
+                    self.vkBridge.send('VKWebAppStorageGet', {
                         keys: ['vk_snaiper_save']
-                    });
-                    if (result && result.keys && result.keys.length > 0 && result.keys[0].value) {
-                        try {
-                            const data = JSON.parse(result.keys[0].value);
-                            if (data && typeof data === 'object') return data;
-                        } catch (e) {}
-                    }
+                    }).then(function(result) {
+                        if (result && result.keys && result.keys.length > 0 && result.keys[0].value) {
+                            try {
+                                var data = JSON.parse(result.keys[0].value);
+                                if (data && typeof data === 'object') { resolve(data); return; }
+                            } catch (e) {}
+                        }
+                        resolve(fallbackLoad());
+                    }).catch(function() { resolve(fallbackLoad()); });
+                } else {
+                    resolve(fallbackLoad());
                 }
-                const m = parseInt(localStorage.getItem('vk_snaiper_monety'));
-                const s = JSON.parse(localStorage.getItem('vk_snaiper_skins') || 'null');
-                const sel = localStorage.getItem('vk_snaiper_selectedSkin');
-                const v = parseFloat(localStorage.getItem('vk_snaiper_volume'));
-                const mut = localStorage.getItem('vk_snaiper_muted') === '1';
+            });
+
+            function fallbackLoad() {
+                var m = parseInt(localStorage.getItem('vk_snaiper_monety'));
+                var s = JSON.parse(localStorage.getItem('vk_snaiper_skins') || 'null');
+                var sel = localStorage.getItem('vk_snaiper_selectedSkin');
+                var v = parseFloat(localStorage.getItem('vk_snaiper_volume'));
+                var mut = localStorage.getItem('vk_snaiper_muted') === '1';
                 return {
                     monety: isNaN(m) ? 0 : m,
                     skins: (s && s.length) ? s : ["knife"],
@@ -691,16 +751,17 @@
                     volume: isNaN(v) ? 0.4 : v,
                     muted: mut
                 };
-            } catch (e) {
-                return null;
             }
         },
 
-        async showInterstitial(onOpen, onClose, onError) {
-            const now = Date.now();
-            const allowed = (now - this.sessionStartTime >= 120000) &&
-                            (now - this.lastInterstitialTime >= 180000);
+        // МЕЖСТРАНИЧНАЯ РЕКЛАМА (между уровнями) — правильный метод
+        showInterstitial: function(onOpen, onClose, onError) {
+            var self = this;
+            var now = Date.now();
+            var allowed = (now - this.sessionStartTime >= 120000) &&
+                          (now - this.lastInterstitialTime >= 180000);
             if (!allowed) {
+                adToast('Interstitial: слишком рано (минимум 2 мин после старта, 3 мин между показами)');
                 if (onClose) onClose();
                 return;
             }
@@ -708,70 +769,79 @@
                 if (onClose) onClose();
                 return;
             }
-            try {
-                if (onOpen) onOpen();
-                await this.vkBridge.send('VKWebAppShowNativeAds', {
-                    ad_format: 'interstitial'
+            if (onOpen) onOpen();
+            this.vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' })
+                .then(function(data) {
+                    self.lastInterstitialTime = Date.now();
+                    if (data && data.result) {
+                        adToast('Interstitial: показан успешно');
+                    } else {
+                        adToast('Interstitial: no-result');
+                    }
+                    if (onClose) onClose();
+                    self.preloadAds();
+                })
+                .catch(function(e) {
+                    var msg = e && e.error_type ? e.error_type : (e && e.message ? e.message : 'unknown');
+                    adToast('Interstitial error: ' + msg);
+                    console.warn('[VK] Interstitial error:', e);
+                    if (onError) onError();
+                    if (onClose) onClose();
                 });
-                this.lastInterstitialTime = Date.now();
-                if (onClose) onClose();
-            } catch (e) {
-                console.warn('[VK] Interstitial error:', e);
-                if (onError) onError();
-                if (onClose) onClose();
-            }
         },
 
-        // REWARDED: веб-фолбэк + анти-зависание
-        async showRewarded(onOpen, onRewarded, onClose, onError) {
-            // WEB-режим (вне VK): возрождаем сразу, без рекламы
+        // REWARDED РЕКЛАМА — правильный метод по документации VK
+        showRewarded: function(onOpen, onRewarded, onClose, onError) {
+            var self = this;
+            // Вне ВКонтакте — фолбэк: возрождаем без ролика
             if (this.platform !== 'vk' || !this.vkBridge) {
-                console.log('[VK] Rewarded: web-mode fallback (grant)');
+                adToast('Вне ВКонтакте: реклама не показывается (fallback-возрождение)');
                 if (onOpen) onOpen();
-                setTimeout(() => {
+                setTimeout(function() {
                     if (onRewarded) onRewarded();
                     if (onClose) onClose();
                 }, 400);
                 return;
             }
-
             if (onOpen) onOpen();
-
-            let settled = false;
-            const finishOk = () => {
+            var settled = false;
+            var finishOk = function() {
                 if (settled) return;
                 settled = true;
-                console.log('[VK] Rewarded: success, grant reward');
+                adToast('Rewarded: досмотрено → награда выдана');
                 if (onRewarded) onRewarded();
                 if (onClose) onClose();
+                self.preloadAds();
             };
-            const finishFail = (reason) => {
+            var finishFail = function(reason) {
                 if (settled) return;
                 settled = true;
-                console.warn('[VK] Rewarded: failed →', reason);
+                adToast('Rewarded ошибка: ' + reason);
                 if (onError) onError();
                 if (onClose) onClose();
             };
+            var hangTimer = setTimeout(function() { finishFail('hang-timeout'); }, 45000);
 
-            const hangTimer = setTimeout(() => finishFail('hang-timeout'), 45000);
-
-            try {
-                await this.vkBridge.send('VKWebAppShowRewardedAd', {});
-                clearTimeout(hangTimer);
-                finishOk();
-            } catch (e) {
-                clearTimeout(hangTimer);
-                finishFail(e && e.message ? e.message : 'reject');
-            }
+            this.vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'reward' })
+                .then(function(data) {
+                    clearTimeout(hangTimer);
+                    if (data && data.result) finishOk();
+                    else finishFail('no-result');
+                })
+                .catch(function(e) {
+                    clearTimeout(hangTimer);
+                    var msg = e && e.error_type ? e.error_type : (e && e.message ? e.message : 'unknown');
+                    finishFail(msg);
+                });
         },
 
-        getLanguage() {
+        getLanguage: function() {
             try {
-                const urlParams = new URLSearchParams(window.location.search);
-                const vkLang = urlParams.get('vk_language') || urlParams.get('language');
+                var urlParams = new URLSearchParams(window.location.search);
+                var vkLang = urlParams.get('vk_language') || urlParams.get('language');
                 if (vkLang === 'ru') return 'ru';
                 if (vkLang === 'en') return 'en';
-                const browserLang = (navigator.language || navigator.userLanguage || 'ru').toLowerCase();
+                var browserLang = (navigator.language || navigator.userLanguage || 'ru').toLowerCase();
                 return browserLang.startsWith('ru') ? 'ru' : 'en';
             } catch (e) {
                 return 'ru';
@@ -782,15 +852,15 @@
     // ============================================
     // ПРЕЛОАДЕР
     // ============================================
-    let loadedAssets = 0;
-    let totalAssets = 0;
-    let gameLoopStarted = false;
-    const preloaderBar = document.getElementById('preloaderBar');
-    const preloaderPercent = document.getElementById('preloaderPercent');
-    const preloaderEl = document.getElementById('preloader');
+    var loadedAssets = 0;
+    var totalAssets = 0;
+    var gameLoopStarted = false;
+    var preloaderBar = document.getElementById('preloaderBar');
+    var preloaderPercent = document.getElementById('preloaderPercent');
+    var preloaderEl = document.getElementById('preloader');
 
     function updatePreloader() {
-        let percent = 0;
+        var percent = 0;
         if (totalAssets > 0) {
             percent = Math.min(100, Math.floor((loadedAssets / totalAssets) * 100));
         }
@@ -822,79 +892,79 @@
     // ============================================
     // ИГРОВАЯ ЛОГИКА
     // ============================================
-    const holst = document.getElementById("igrovoePole");
-    const kist = holst.getContext("2d");
+    var holst = document.getElementById("igrovoePole");
+    var kist = holst.getContext("2d");
 
-    const uiMonety = document.getElementById("schetMonet");
-    const uiPanelMonet = document.getElementById("panelMonet");
-    const uiGlavnoeMenu = document.getElementById("glavnoeMenu");
-    const uiEkranProigrysha = document.getElementById("ekranProigrysha");
-    const uiEkranMagazina = document.getElementById("ekranMagazina");
-    const uiSetkaSkinov = document.getElementById("setkaSkinov");
-    const uiTekushiyUroven = document.getElementById("tekushiyUrovenUI");
-    const uiPopupNagrada = document.getElementById("popupNagrada");
+    var uiMonety = document.getElementById("schetMonet");
+    var uiPanelMonet = document.getElementById("panelMonet");
+    var uiGlavnoeMenu = document.getElementById("glavnoeMenu");
+    var uiEkranProigrysha = document.getElementById("ekranProigrysha");
+    var uiEkranMagazina = document.getElementById("ekranMagazina");
+    var uiSetkaSkinov = document.getElementById("setkaSkinov");
+    var uiTekushiyUroven = document.getElementById("tekushiyUrovenUI");
+    var uiPopupNagrada = document.getElementById("popupNagrada");
 
-    const knopkaIgrat = document.getElementById("knopkaIgrat");
-    const knopkaZanovo = document.getElementById("knopkaZanovo");
-    const knopkaVoskresheniya = document.getElementById("knopkaVoskresheniya");
-    const knopkaMagazin = document.getElementById("knopkaMagazin");
-    const knopkaNazadIzMagazina = document.getElementById("knopkaNazadIzMagazina");
-    const knopkaZvuka = document.getElementById("knopkaZvuka");
-    const polzunokZvuka = document.getElementById("polzunokZvuka");
-    const knopkaYazyka = document.getElementById("knopkaYazyka");
-    const panelYazyka = document.getElementById("panelYazyka");
+    var knopkaIgrat = document.getElementById("knopkaIgrat");
+    var knopkaZanovo = document.getElementById("knopkaZanovo");
+    var knopkaVoskresheniya = document.getElementById("knopkaVoskresheniya");
+    var knopkaMagazin = document.getElementById("knopkaMagazin");
+    var knopkaNazadIzMagazina = document.getElementById("knopkaNazadIzMagazina");
+    var knopkaZvuka = document.getElementById("knopkaZvuka");
+    var polzunokZvuka = document.getElementById("polzunokZvuka");
+    var knopkaYazyka = document.getElementById("knopkaYazyka");
+    var panelYazyka = document.getElementById("panelYazyka");
 
-    const panelPauza = document.getElementById("panelPauza");
-    const knopkaPauza = document.getElementById("knopkaPauza");
-    const ekranPauzy = document.getElementById("ekranPauzy");
-    const knopkaProdolzit = document.getElementById("knopkaProdolzit");
-    const knopkaRestartPauza = document.getElementById("knopkaRestartPauza");
-    const knopkaVMenyu = document.getElementById("knopkaVMenyu");
-    const knopkaVMenyuGO = document.getElementById("knopkaVMenyuGO");
+    var panelPauza = document.getElementById("panelPauza");
+    var knopkaPauza = document.getElementById("knopkaPauza");
+    var ekranPauzy = document.getElementById("ekranPauzy");
+    var knopkaProdolzit = document.getElementById("knopkaProdolzit");
+    var knopkaRestartPauza = document.getElementById("knopkaRestartPauza");
+    var knopkaVMenyu = document.getElementById("knopkaVMenyu");
+    var knopkaVMenyuGO = document.getElementById("knopkaVMenyuGO");
 
-    const uiPanelLevel = document.getElementById("panelLevel");
-    const uiPanelNozhei = document.getElementById("panelNozhei");
-    const uiTekstLevel = document.getElementById("tekstLevel");
-    const uiTekstNozhei = document.getElementById("tekstNozhei");
+    var uiPanelLevel = document.getElementById("panelLevel");
+    var uiPanelNozhei = document.getElementById("panelNozhei");
+    var uiTekstLevel = document.getElementById("tekstLevel");
+    var uiTekstNozhei = document.getElementById("tekstNozhei");
 
-    document.addEventListener('contextmenu', e => e.preventDefault());
-    document.addEventListener('selectstart', e => e.preventDefault());
-    document.addEventListener('dragstart', e => e.preventDefault());
+    document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+    document.addEventListener('selectstart', function(e) { e.preventDefault(); });
+    document.addEventListener('dragstart', function(e) { e.preventDefault(); });
 
-    const GAME_BASE_WIDTH = 400;
-    let globalScale = 1;
+    var GAME_BASE_WIDTH = 400;
+    var globalScale = 1;
 
-    let lastTime = 0;
-    let deltaTime = 0;
-    const SPEED_MULTIPLIER = 0.80;
+    var lastTime = 0;
+    var deltaTime = 0;
+    var SPEED_MULTIPLIER = 0.80;
 
-    let ugolArbuza = 0;
-    let skorostArbuza = 0.03 * SPEED_MULTIPLIER;
-    let startNozhY = 0;
+    var ugolArbuza = 0;
+    var skorostArbuza = 0.03 * SPEED_MULTIPLIER;
+    var startNozhY = 0;
 
-    let nozh = { x: 200, y: 0, shirina: 40, vysota: 120, letit: false };
-    let arbuz = { x: 200, y: 0, razmer: 100, bazi_Y: 0 };
+    var nozh = { x: 200, y: 0, shirina: 40, vysota: 120, letit: false };
+    var arbuz = { x: 200, y: 0, razmer: 100, bazi_Y: 0 };
 
-    let fazaDvizheniya = 0;
-    let meteor = { aktiven: false, ugol: 0, skorost: 0.04 * SPEED_MULTIPLIER, radiusOtArbuza: 160, razmer: 30 };
-    let vteknutieNozhi = [];
-    let yablokiNaArbuze = [];
-    let bronyaNaArbuze = [];
-    let oskolki = [];
-    let tryaskaEkrana = 0;
-    let uroven = 1;
-    let nozhiDlyaPobedy = 5;
-    let ostalosNozhei = 5;
-    let bronyaProbytaNaUrovne = false;
-    let vsplyvayushieTeksty = [];
-    let krasnayaVspyshka = 0;
-    let padayushiyNozh = null;
-    let sostoyanieIgry = "MENU";
-    let pauzaAktivna = false;
+    var fazaDvizheniya = 0;
+    var meteor = { aktiven: false, ugol: 0, skorost: 0.04 * SPEED_MULTIPLIER, radiusOtArbuza: 160, razmer: 30 };
+    var vteknutieNozhi = [];
+    var yablokiNaArbuze = [];
+    var bronyaNaArbuze = [];
+    var oskolki = [];
+    var tryaskaEkrana = 0;
+    var uroven = 1;
+    var nozhiDlyaPobedy = 5;
+    var ostalosNozhei = 5;
+    var bronyaProbytaNaUrovne = false;
+    var vsplyvayushieTeksty = [];
+    var krasnayaVspyshka = 0;
+    var padayushiyNozh = null;
+    var sostoyanieIgry = "MENU";
+    var pauzaAktivna = false;
 
-    let monety = 0;
-    let kuplyennyeSkins = ["knife"];
-    let vybrannyiSkinId = "knife";
+    var monety = 0;
+    var kuplyennyeSkins = ["knife"];
+    var vybrannyiSkinId = "knife";
 
     function pauseGameForAd() {
         if (masterGain) masterGain.gain.value = 0;
@@ -918,7 +988,7 @@
         if (sostoyanieIgry === "PAUSED") sostoyanieIgry = "PLAY";
     }
 
-    document.addEventListener('visibilitychange', () => {
+    document.addEventListener('visibilitychange', function() {
         if (document.hidden) pauseGameForAd();
         else resumeGameAfterAd();
     });
@@ -926,13 +996,13 @@
     window.addEventListener('focus', resumeGameAfterAd);
 
     function scaleMenus() {
-        const container = document.getElementById('gameContainer');
-        const width = container ? container.clientWidth : window.innerWidth;
-        const baseMenuWidth = 320;
-        let menuScale = 1.0;
+        var container = document.getElementById('gameContainer');
+        var width = container ? container.clientWidth : window.innerWidth;
+        var baseMenuWidth = 320;
+        var menuScale = 1.0;
         if (width < 350) menuScale = Math.max(0.6, width / baseMenuWidth);
-        const menus = document.querySelectorAll('.popup-scale-target');
-        menus.forEach(menu => {
+        var menus = document.querySelectorAll('.popup-scale-target');
+        menus.forEach(function(menu) {
             if (menu.classList.contains('skryto')) return;
             if (menu.classList.contains('popup-overlay')) {
                 menu.style.transform = 'translate(-50%, -50%) scale(' + menuScale + ')';
@@ -946,7 +1016,7 @@
         if (sostoyanieIgry === "PLAY" || sostoyanieIgry === "GAMEOVER") {
             uiPanelLevel.classList.remove("skryto");
             uiPanelNozhei.classList.remove("skryto");
-            const eb = (uroven % 5 === 0);
+            var eb = (uroven % 5 === 0);
             uiTekstLevel.textContent = (eb ? t("boss") : t("level") + " ") + uroven;
             uiTekstNozhei.textContent = t("knives") + " " + ostalosNozhei;
             uiTekstLevel.style.color = eb ? "#FF4444" : "#FFFFFF";
@@ -961,7 +1031,7 @@
     }
 
     function nastroikaEkrana() {
-        let winWidth, winHeight;
+        var winWidth, winHeight;
         if (window.visualViewport) {
             winWidth = window.visualViewport.width;
             winHeight = window.visualViewport.height;
@@ -971,8 +1041,8 @@
         }
         winWidth = Math.max(0, winWidth - 20);
         winHeight = Math.max(0, winHeight - 20);
-        const aspectRatio = 9 / 16;
-        let finalWidth, finalHeight;
+        var aspectRatio = 9 / 16;
+        var finalWidth, finalHeight;
         if (winWidth / winHeight > aspectRatio) {
             finalHeight = winHeight;
             finalWidth = finalHeight * aspectRatio;
@@ -980,27 +1050,27 @@
             finalWidth = winWidth;
             finalHeight = finalWidth / aspectRatio;
         }
-        const container = document.getElementById('gameContainer');
+        var container = document.getElementById('gameContainer');
         container.style.width = finalWidth + 'px';
         container.style.height = finalHeight + 'px';
-        const dpr = window.devicePixelRatio || 1;
+        var dpr = window.devicePixelRatio || 1;
         holst.width = Math.floor(finalWidth * dpr);
         holst.height = Math.floor(finalHeight * dpr);
         kist.setTransform(1, 0, 0, 1, 0, 0);
         kist.scale(dpr, dpr);
         globalScale = finalWidth / GAME_BASE_WIDTH;
 
-        const uiScale = Math.max(0.5, Math.min(globalScale, 1.2));
-        [uiPanelLevel, uiPanelNozhei].forEach(el => {
+        var uiScale = Math.max(0.5, Math.min(globalScale, 1.2));
+        [uiPanelLevel, uiPanelNozhei].forEach(function(el) {
             if (el) {
-                const newSize = Math.max(10, 24 * uiScale);
+                var newSize = Math.max(10, 24 * uiScale);
                 el.style.fontSize = newSize + 'px';
-                const shadowSize = Math.max(1, 2 * uiScale);
+                var shadowSize = Math.max(1, 2 * uiScale);
                 el.style.textShadow = shadowSize + 'px ' + shadowSize + 'px ' + (shadowSize * 2) + 'px #000000';
             }
         });
         if (uiPanelMonet) {
-            const newSize = Math.max(12, 18 * uiScale);
+            var newSize = Math.max(12, 18 * uiScale);
             uiPanelMonet.style.fontSize = newSize + 'px';
         }
 
@@ -1010,18 +1080,18 @@
         arbuz.bazi_Y = 230;
         if (sostoyanieIgry === "MENU" || sostoyanieIgry === "GAMEOVER") arbuz.y = arbuz.bazi_Y;
 
-        const slider = document.getElementById('panelZvuka');
+        var slider = document.getElementById('panelZvuka');
         if (slider) {
-            const scale = Math.min(globalScale, 0.8);
+            var scale = Math.min(globalScale, 0.8);
             slider.style.transform = 'translate(' + (15 * scale) + 'px, ' + (50 * scale) + 'px) scale(' + scale + ')';
         }
-        const monet = document.getElementById('panelMonet');
+        var monet = document.getElementById('panelMonet');
         if (monet) {
-            const scale = Math.min(globalScale, 0.8);
+            var scale = Math.min(globalScale, 0.8);
             monet.style.transform = 'translate(' + (-15 * scale) + 'px, ' + (50 * scale) + 'px) scale(' + scale + ')';
         }
         if (panelYazyka) {
-            const scale = Math.max(0.6, Math.min(globalScale, 1));
+            var scale = Math.max(0.6, Math.min(globalScale, 1));
             panelYazyka.style.transform = 'scale(' + scale + ')';
         }
 
@@ -1031,7 +1101,7 @@
     }
 
     function forceResize() {
-        requestAnimationFrame(() => { nastroikaEkrana(); });
+        requestAnimationFrame(function() { nastroikaEkrana(); });
     }
 
     function saveData() {
@@ -1045,7 +1115,7 @@
     }
 
     function loadDataFromAdapter() {
-        PlatformAdapter.loadData().then(data => {
+        PlatformAdapter.loadData().then(function(data) {
             if (data) {
                 if (data.monety !== undefined) monety = data.monety;
                 if (data.skins) kuplyennyeSkins = data.skins;
@@ -1063,17 +1133,17 @@
     }
 
     // === АУДИО ===
-    let audioContext = null;
-    let masterGain = null;
-    let isAudioUnlocked = false;
+    var audioContext = null;
+    var masterGain = null;
+    var isAudioUnlocked = false;
 
-    const audioBuffers = {};
-    const audioFileList = { throw: "throw.mp3", fail: "fail.mp3", apple: "apple.mp3", win: "win.mp3", chest: "chest.mp3" };
+    var audioBuffers = {};
+    var audioFileList = { throw: "throw.mp3", fail: "fail.mp3", apple: "apple.mp3", win: "win.mp3", chest: "chest.mp3" };
 
     function initAudio() {
         if (audioContext) return true;
         try {
-            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            var AudioCtx = window.AudioContext || window.webkitAudioContext;
             if (!AudioCtx) return false;
             audioContext = new AudioCtx();
             masterGain = audioContext.createGain();
@@ -1086,7 +1156,7 @@
     function unlockAudio() {
         if (isAudioUnlocked) return;
         if (initAudio() && audioContext.state === 'suspended') {
-            audioContext.resume().then(() => { isAudioUnlocked = true; }).catch(() => {});
+            audioContext.resume().then(function() { isAudioUnlocked = true; }).catch(function() {});
         }
         isAudioUnlocked = true;
     }
@@ -1095,20 +1165,22 @@
     document.addEventListener('keydown', unlockAudio, { once: true, passive: true });
 
     function loadAudioFiles() {
-        const audioCount = Object.keys(audioFileList).length;
+        var audioCount = Object.keys(audioFileList).length;
         if (!initAudio()) {
-            for (let i = 0; i < audioCount; i++) assetLoaded();
+            for (var i = 0; i < audioCount; i++) assetLoaded();
             return;
         }
-        Object.entries(audioFileList).forEach(([key, url]) => {
+        Object.entries(audioFileList).forEach(function(entry) {
+            var key = entry[0];
+            var url = entry[1];
             fetch(url)
-                .then(res => res.ok ? res.arrayBuffer() : Promise.reject(new Error('404')))
-                .then(buf => audioContext.decodeAudioData(buf))
-                .then(dec => {
+                .then(function(res) { return res.ok ? res.arrayBuffer() : Promise.reject(new Error('404')); })
+                .then(function(buf) { return audioContext.decodeAudioData(buf); })
+                .then(function(dec) {
                     audioBuffers[key] = dec;
                     assetLoaded();
                 })
-                .catch(() => {
+                .catch(function() {
                     assetLoaded();
                 });
         });
@@ -1117,9 +1189,9 @@
     function playSnd(sndName) {
         if (isMuted || currentVolume === 0 || !audioContext || !audioBuffers[sndName]) return;
         try {
-            const src = audioContext.createBufferSource();
+            var src = audioContext.createBufferSource();
             src.buffer = audioBuffers[sndName];
-            const gn = audioContext.createGain();
+            var gn = audioContext.createGain();
             gn.gain.value = currentVolume;
             src.connect(gn); gn.connect(masterGain);
             src.start(0);
@@ -1127,14 +1199,14 @@
     }
 
     function updateVolumeUI() {
-        const v = isMuted ? 0 : currentVolume;
+        var v = isMuted ? 0 : currentVolume;
         if (masterGain) masterGain.gain.value = v;
         if (knopkaZvuka) knopkaZvuka.innerText = v === 0 ? "🔇" : "🔊";
         if (polzunokZvuka) polzunokZvuka.value = v;
     }
 
-    let currentVolume = 0.4;
-    let isMuted = false;
+    var currentVolume = 0.4;
+    var isMuted = false;
 
     if (polzunokZvuka) {
         polzunokZvuka.addEventListener('input', function(e) {
@@ -1154,8 +1226,8 @@
     }
 
     // === ЛОКАЛИЗАЦИЯ ===
-    let currentLang = 'ru';
-    const i18n = {
+    var currentLang = 'ru';
+    var i18n = {
         ru: {
             title: "ФРУКТОВЫЙ СНАЙПЕР",
             play: "ИГРАТЬ", shop: "МАГАЗИН СКИНОВ", armory: "ОРУЖЕЙНАЯ",
@@ -1196,7 +1268,7 @@
     }
 
     function applyLanguage() {
-        const el = (id) => document.getElementById(id);
+        var el = function(id) { return document.getElementById(id); };
         if (el("knopkaIgrat")) el("knopkaIgrat").innerText = t("play");
         if (el("knopkaMagazin")) el("knopkaMagazin").innerText = t("shop");
         if (el("ui_armory")) el("ui_armory").innerText = t("armory");
@@ -1229,7 +1301,7 @@
     }
 
     // === СКИНЫ И АССЕТЫ ===
-    const vseSkins = [
+    var vseSkins = [
         { id: "knife", price: 0, file: "knife.png", speed: 35 * SPEED_MULTIPLIER, appleHitbox: 0.55, coinMult: 1, slow: 1, pierce: false, isGacha: false },
         { id: "pencil", price: 10, file: "pencil.png", speed: 55 * SPEED_MULTIPLIER, appleHitbox: 0.55, coinMult: 1, slow: 1, pierce: false, isGacha: false },
         { id: "sword", price: 25, file: "sword.png", speed: 35 * SPEED_MULTIPLIER, appleHitbox: 0.9, coinMult: 1, slow: 1, pierce: false, isGacha: false },
@@ -1239,32 +1311,32 @@
         { id: "legendary", price: 999, file: "legendary.png", speed: 60 * SPEED_MULTIPLIER, appleHitbox: 1.0, coinMult: 3, slow: 0.5, pierce: true, isGacha: true }
     ];
 
-    function poluchitStatiSkina() { return vseSkins.find(s => s.id === vybrannyiSkinId) || vseSkins[0]; }
+    function poluchitStatiSkina() { return vseSkins.find(function(s) { return s.id === vybrannyiSkinId; }) || vseSkins[0]; }
 
     totalAssets = 10 + vseSkins.length + Object.keys(audioFileList).length;
     updatePreloader();
 
-    const kartinkaYabloko = new Image(); kartinkaYabloko.src = "apple.png";
-    const kartinkaBronya = new Image(); kartinkaBronya.src = "spike.png";
-    const kartinkaMeteor = new Image(); kartinkaMeteor.src = "meteor.png";
-    const kartinkaSunduk = new Image(); kartinkaSunduk.src = "chest.png";
-    const kartinkaArbuz = new Image(); kartinkaArbuz.src = "target.png";
-    const kartinkaBoss = new Image(); kartinkaBoss.src = "boss.png";
-    const kartinkaPizza = new Image(); kartinkaPizza.src = "pizza.png";
-    const kartinkaBurger = new Image(); kartinkaBurger.src = "burger.png";
-    const kartinkaStump = new Image(); kartinkaStump.src = "stump.png";
-    const kartinkaGolem = new Image(); kartinkaGolem.src = "golem.png";
+    var kartinkaYabloko = new Image(); kartinkaYabloko.src = "apple.png";
+    var kartinkaBronya = new Image(); kartinkaBronya.src = "spike.png";
+    var kartinkaMeteor = new Image(); kartinkaMeteor.src = "meteor.png";
+    var kartinkaSunduk = new Image(); kartinkaSunduk.src = "chest.png";
+    var kartinkaArbuz = new Image(); kartinkaArbuz.src = "target.png";
+    var kartinkaBoss = new Image(); kartinkaBoss.src = "boss.png";
+    var kartinkaPizza = new Image(); kartinkaPizza.src = "pizza.png";
+    var kartinkaBurger = new Image(); kartinkaBurger.src = "burger.png";
+    var kartinkaStump = new Image(); kartinkaStump.src = "stump.png";
+    var kartinkaGolem = new Image(); kartinkaGolem.src = "golem.png";
 
-    const kartinkiOruzhiya = {};
+    var kartinkiOruzhiya = {};
 
     [kartinkaYabloko, kartinkaBronya, kartinkaMeteor, kartinkaSunduk, kartinkaArbuz,
-     kartinkaBoss, kartinkaPizza, kartinkaBurger, kartinkaStump, kartinkaGolem].forEach(img => {
+     kartinkaBoss, kartinkaPizza, kartinkaBurger, kartinkaStump, kartinkaGolem].forEach(function(img) {
         img.onload = assetLoaded;
         img.onerror = assetLoaded;
     });
 
-    vseSkins.forEach(s => {
-        const i = new Image();
+    vseSkins.forEach(function(s) {
+        var i = new Image();
         i.src = s.file;
         i.onload = assetLoaded;
         i.onerror = assetLoaded;
@@ -1305,34 +1377,34 @@
         saveData();
         if (sostoyanieIgry === "MENU") {
             otrisovatMagazin();
-            const b = document.getElementById("knopkaSunduk");
+            var b = document.getElementById("knopkaSunduk");
             if (b) b.disabled = monety < 30;
         }
     }
 
     window._game = {};
     window._game.otkrytSunduk = function() {
-        const b = document.getElementById("knopkaSunduk");
+        var b = document.getElementById("knopkaSunduk");
         if (monety < 30 || (b && b.disabled)) return;
         if (b) b.disabled = true;
         dobavitMonety(-30);
         playSnd("chest");
-        const c = document.getElementById("kartinkaSunduka");
+        var c = document.getElementById("kartinkaSunduka");
         if (c) c.classList.add("chest-opening");
-        setTimeout(() => {
+        setTimeout(function() {
             if (c) c.classList.remove("chest-opening");
-            const sh = Math.random();
-            let nag = "", leg = false;
+            var sh = Math.random();
+            var nag = "", leg = false;
             if (sh <= 0.05 && !kuplyennyeSkins.includes("legendary")) {
                 kuplyennyeSkins.push("legendary");
                 saveData();
                 nag = t("legendaryReward");
-                const tx = document.getElementById("tekstNagrady");
+                var tx = document.getElementById("tekstNagrady");
                 if (tx) tx.style.color = "#FFD700";
                 leg = true;
             } else {
-                const r = Math.random();
-                let k = 0;
+                var r = Math.random();
+                var k = 0;
                 if (r < 0.35) k = 10;
                 else if (r < 0.75) k = 20;
                 else if (r < 0.90) k = 30;
@@ -1340,11 +1412,11 @@
                 else k = 50;
                 dobavitMonety(k);
                 nag = "+" + k + " 🍎";
-                const tx = document.getElementById("tekstNagrady");
+                var tx = document.getElementById("tekstNagrady");
                 if (tx) tx.style.color = "white";
             }
             playSnd("win");
-            const tx = document.getElementById("tekstNagrady");
+            var tx = document.getElementById("tekstNagrady");
             if (tx) tx.innerText = nag;
             if (uiPopupNagrada) uiPopupNagrada.classList.remove("skryto");
         }, 800);
@@ -1356,7 +1428,7 @@
     };
 
     window._game.kupitSkin = function(id) {
-        const s = vseSkins.find(x => x.id === id);
+        var s = vseSkins.find(function(x) { return x.id === id; });
         if (!s) return;
         if (monety >= s.price && !kuplyennyeSkins.includes(id)) {
             dobavitMonety(-s.price);
@@ -1377,22 +1449,22 @@
 
     function otrisovatMagazin() {
         if (!uiSetkaSkinov) return;
-        let h = "";
-        vseSkins.forEach(s => {
+        var h = "";
+        vseSkins.forEach(function(s) {
             if (s.isGacha && !kuplyennyeSkins.includes(s.id)) return;
-            const ok = kuplyennyeSkins.includes(s.id);
-            const eq = (vybrannyiSkinId === s.id);
-            let bh = "";
+            var ok = kuplyennyeSkins.includes(s.id);
+            var eq = (vybrannyiSkinId === s.id);
+            var bh = "";
             if (eq) {
                 bh = '<button class="MknopkaVybrano" disabled>' + t("equipped") + '</button>';
             } else if (ok) {
                 bh = '<button class="MknopkaVybrat" onclick="window._game.vybratSkin(\'' + s.id + '\')">' + t("equip") + '</button>';
             } else {
-                const can = monety >= s.price;
+                var can = monety >= s.price;
                 bh = '<button class="' + (can ? "MknopkaKupit" : "MknopkaKupit serya") + '" onclick="window._game.kupitSkin(\'' + s.id + '\')" ' + (!can ? "disabled" : "") + '>' + s.price + ' 🍎</button>';
             }
-            const skinName = t(s.id);
-            let desc = "";
+            var skinName = t(s.id);
+            var desc = "";
             if (s.id === "knife") desc = currentLang === 'ru' ? "Стандартный нож" : "Standard knife";
             else if (s.id === "pencil") desc = currentLang === 'ru' ? "Летит очень быстро" : "Flies very fast";
             else if (s.id === "sword") desc = currentLang === 'ru' ? "Увеличенный сбор яблок" : "Increased apple collection";
@@ -1409,7 +1481,7 @@
                 '</div>';
         });
         uiSetkaSkinov.innerHTML = h;
-        const b = document.getElementById("knopkaSunduk");
+        var b = document.getElementById("knopkaSunduk");
         if (b) {
             b.disabled = monety < 30;
             b.innerText = t("open") + " (30 🍎)";
@@ -1463,7 +1535,7 @@
     }
 
     function handleInput(e) {
-        const tgt = e.target;
+        var tgt = e.target;
         if (tgt.id === "polzunokZvuka" || tgt.id === "knopkaZvuka" || tgt.id === "knopkaYazyka" ||
             tgt.id === "knopkaPauza" ||
             tgt.closest('.knopka') || tgt.closest('#panelZvuka') ||
@@ -1490,7 +1562,6 @@
         }
     });
 
-    // СБРОС: теперь прячет ВСЕ оверлеи (фикс бага «меню не уходит»)
     function sbrosIgry() {
         uroven = 1;
         nozhiDlyaPobedy = 5;
@@ -1523,18 +1594,18 @@
         yablokiNaArbuze = [];
         bronyaNaArbuze = [];
         bronyaProbytaNaUrovne = false;
-        let ky = Math.floor(Math.random() * 3);
-        for (let i = 0; i < ky; i++) {
-            let p = 0, u;
+        var ky = Math.floor(Math.random() * 3);
+        for (var i = 0; i < ky; i++) {
+            var p = 0, u;
             do { u = Math.random() * Math.PI * 2; p++; } while (!bezopasnyUgol(u, yablokiNaArbuze, 0.65) && p < 50);
             yablokiNaArbuze.push(u);
         }
         if (uroven >= 3) {
-            let kb = 1 + Math.floor(uroven / 5);
+            var kb = 1 + Math.floor(uroven / 5);
             if (kb > 3) kb = 3;
-            for (let j = 0; j < kb; j++) {
-                let p = 0, u;
-                let z = yablokiNaArbuze.concat(bronyaNaArbuze);
+            for (var j = 0; j < kb; j++) {
+                var p = 0, u;
+                var z = yablokiNaArbuze.concat(bronyaNaArbuze);
                 do { u = Math.random() * Math.PI * 2; p++; } while (!bezopasnyUgol(u, z, 0.65) && p < 50);
                 bronyaNaArbuze.push(u);
             }
@@ -1542,8 +1613,8 @@
     }
 
     function bezopasnyUgol(nu, mz, md) {
-        for (let i = 0; i < mz.length; i++) {
-            let r = Math.abs(nu - mz[i]) % (Math.PI * 2);
+        for (var i = 0; i < mz.length; i++) {
+            var r = Math.abs(nu - mz[i]) % (Math.PI * 2);
             if (r > Math.PI) r = (Math.PI * 2) - r;
             if (r < md) return false;
         }
@@ -1553,9 +1624,9 @@
     function sleduyushiyUroven() {
         playSnd("win");
         tryaskaEkrana = 15;
-        const cv = ["#ff3333", "#cc0000", "#ff6666", "#2eb82e", "#000", "#d4a373"];
-        for (let i = 0; i < 80; i++) {
-            const es = Math.random() > 0.85;
+        var cv = ["#ff3333", "#cc0000", "#ff6666", "#2eb82e", "#000", "#d4a373"];
+        for (var i = 0; i < 80; i++) {
+            var es = Math.random() > 0.85;
             oskolki.push({
                 x: 200, y: arbuz.y,
                 vx: (Math.random() - 0.5) * 25, vy: (Math.random() - 0.5) * 25 - 5,
@@ -1565,15 +1636,15 @@
             });
         }
         uroven++;
-        const eb = (uroven % 5 === 0);
-        let bn = 5 + Math.floor(uroven / 3);
+        var eb = (uroven % 5 === 0);
+        var bn = 5 + Math.floor(uroven / 3);
         if (eb) bn += 1;
         if (bn > 7) bn = 7;
         nozhiDlyaPobedy = bn;
         ostalosNozhei = bn;
         vteknutieNozhi = [];
         sozdatYablokiIBronyu();
-        let ns = 0.03 + (uroven * 0.002);
+        var ns = 0.03 + (uroven * 0.002);
         if (ns > 0.07) ns = 0.07;
         skorostArbuza = ns * SPEED_MULTIPLIER * (Math.random() > 0.5 ? 1 : -1);
         if (uroven >= 8) {
@@ -1588,8 +1659,8 @@
     }
 
     function poluchitKartinkuMisheni() {
-        const eb = (uroven % 5 === 0);
-        const ep = Math.ceil(uroven / 5) % 3;
+        var eb = (uroven % 5 === 0);
+        var ep = Math.ceil(uroven / 5) % 3;
         if (ep === 1) return eb ? kartinkaBoss : kartinkaArbuz;
         if (ep === 2) return eb ? kartinkaBurger : kartinkaPizza;
         return eb ? kartinkaGolem : kartinkaStump;
@@ -1607,10 +1678,10 @@
             kist.translate((Math.random() - 0.5) * tryaskaEkrana, (Math.random() - 0.5) * tryaskaEkrana);
             tryaskaEkrana -= 0.5;
         }
-        const eb = (uroven % 5 === 0);
-        const ss = poluchitStatiSkina();
-        let tr = arbuz.razmer;
-        let mx = 0, my = 0;
+        var eb = (uroven % 5 === 0);
+        var ss = poluchitStatiSkina();
+        var tr = arbuz.razmer;
+        var mx = 0, my = 0;
         if (meteor.aktiven && (sostoyanieIgry === "PLAY" || sostoyanieIgry === "GAMEOVER")) {
             meteor.ugol += meteor.skorost * deltaTime * 60;
             mx = arbuz.x + Math.cos(meteor.ugol) * meteor.radiusOtArbuza;
@@ -1627,15 +1698,15 @@
             if (nozh.letit) {
                 nozh.y -= ss.speed * deltaTime * 60;
                 if (meteor.aktiven) {
-                    const dx = nozh.x - mx, dy = nozh.y - my;
-                    const d = Math.sqrt(dx * dx + dy * dy);
+                    var dx = nozh.x - mx, dy = nozh.y - my;
+                    var d = Math.sqrt(dx * dx + dy * dy);
                     if (d < meteor.razmer + nozh.shirina / 2) {
                         playSnd("fail");
                         nozh.letit = false;
                         sostoyanieIgry = "GAMEOVER";
                         tryaskaEkrana = 25;
                         krasnayaVspyshka = 0.8;
-                        for (let s = 0; s < 30; s++) {
+                        for (var s = 0; s < 30; s++) {
                             oskolki.push({
                                 x: mx, y: my,
                                 vx: (Math.random() - 0.5) * 20, vy: (Math.random() - 0.5) * 20,
@@ -1648,19 +1719,20 @@
                         if (uiTekushiyUroven) uiTekushiyUroven.innerText = uroven;
                         if (uiEkranProigrysha) uiEkranProigrysha.classList.remove("skryto");
                         updateHUD();
+                        PlatformAdapter.checkRewardAds();
                     }
                 }
                 if (nozh.letit && nozh.y <= arbuz.y + tr) {
                     nozh.letit = false;
-                    const uz = -ugolArbuza;
-                    let pn = false, pb = false, ib = -1;
-                    for (let i = 0; i < vteknutieNozhi.length; i++) {
-                        let r = Math.abs(uz - vteknutieNozhi[i]) % (Math.PI * 2);
+                    var uz = -ugolArbuza;
+                    var pn = false, pb = false, ib = -1;
+                    for (var i = 0; i < vteknutieNozhi.length; i++) {
+                        var r = Math.abs(uz - vteknutieNozhi[i]) % (Math.PI * 2);
                         if (r > Math.PI) r = (Math.PI * 2) - r;
                         if (r < 0.35) { pn = true; break; }
                     }
-                    for (let k = 0; k < bronyaNaArbuze.length; k++) {
-                        let r = Math.abs(uz - bronyaNaArbuze[k]) % (Math.PI * 2);
+                    for (var k = 0; k < bronyaNaArbuze.length; k++) {
+                        var r = Math.abs(uz - bronyaNaArbuze[k]) % (Math.PI * 2);
                         if (r > Math.PI) r = (Math.PI * 2) - r;
                         if (r < 0.45) { pb = true; ib = k; break; }
                     }
@@ -1668,7 +1740,7 @@
                         bronyaNaArbuze.splice(ib, 1);
                         bronyaProbytaNaUrovne = true;
                         pb = false;
-                        for (let s = 0; s < 20; s++) {
+                        for (var s = 0; s < 20; s++) {
                             oskolki.push({
                                 x: nozh.x, y: nozh.y - 20,
                                 vx: (Math.random() - 0.5) * 15, vy: (Math.random() - 0.5) * 15 - 5,
@@ -1683,7 +1755,7 @@
                         sostoyanieIgry = "GAMEOVER";
                         tryaskaEkrana = 20;
                         krasnayaVspyshka = 0.6;
-                        for (let s = 0; s < 25; s++) {
+                        for (var s = 0; s < 25; s++) {
                             oskolki.push({
                                 x: 200, y: arbuz.y + tr,
                                 vx: (Math.random() - 0.5) * 20, vy: (Math.random() - 0.5) * 20,
@@ -1696,16 +1768,17 @@
                         if (uiTekushiyUroven) uiTekushiyUroven.innerText = uroven;
                         if (uiEkranProigrysha) uiEkranProigrysha.classList.remove("skryto");
                         updateHUD();
+                        PlatformAdapter.checkRewardAds();
                     } else {
-                        for (let j = 0; j < yablokiNaArbuze.length; j++) {
-                            let r = Math.abs(uz - yablokiNaArbuze[j]) % (Math.PI * 2);
+                        for (var j = 0; j < yablokiNaArbuze.length; j++) {
+                            var r = Math.abs(uz - yablokiNaArbuze[j]) % (Math.PI * 2);
                             if (r > Math.PI) r = (Math.PI * 2) - r;
                             if (r < ss.appleHitbox) {
                                 playSnd("apple");
                                 yablokiNaArbuze.splice(j, 1);
-                                const ng = 1 * ss.coinMult;
+                                var ng = 1 * ss.coinMult;
                                 dobavitMonety(ng);
-                                for (let s = 0; s < 15; s++) {
+                                for (var s = 0; s < 15; s++) {
                                     oskolki.push({
                                         x: 200, y: arbuz.y + tr,
                                         vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10,
@@ -1729,8 +1802,8 @@
             ugolArbuza += skorostArbuza * ss.slow * deltaTime * 60;
         }
 
-        for (let i = oskolki.length - 1; i >= 0; i--) {
-            let o = oskolki[i];
+        for (var i = oskolki.length - 1; i >= 0; i--) {
+            var o = oskolki[i];
             o.x += o.vx * deltaTime * 60;
             o.y += o.vy * deltaTime * 60;
             o.vy += 0.8 * deltaTime * 60;
@@ -1747,8 +1820,8 @@
             }
         }
 
-        const an = kartinkiOruzhiya[vybrannyiSkinId];
-        const am = poluchitKartinkuMisheni();
+        var an = kartinkiOruzhiya[vybrannyiSkinId];
+        var am = poluchitKartinkuMisheni();
         if (meteor.aktiven) {
             kist.save();
             kist.translate(mx, my);
@@ -1759,14 +1832,14 @@
         kist.save();
         kist.translate(arbuz.x, arbuz.y);
         kist.rotate(ugolArbuza);
-        for (let i = 0; i < vteknutieNozhi.length; i++) {
+        for (var i = 0; i < vteknutieNozhi.length; i++) {
             kist.save();
             kist.rotate(vteknutieNozhi[i]);
             if (an) kist.drawImage(an, -nozh.shirina / 2, tr - 30, nozh.shirina, nozh.vysota);
             kist.restore();
         }
         if (am) kist.drawImage(am, -tr, -tr, tr * 2, tr * 2);
-        for (let i = 0; i < yablokiNaArbuze.length; i++) {
+        for (var i = 0; i < yablokiNaArbuze.length; i++) {
             kist.save();
             kist.rotate(yablokiNaArbuze[i]);
             kist.translate(0, tr + 30);
@@ -1774,7 +1847,7 @@
             kist.drawImage(kartinkaYabloko, -50, -50, 100, 100);
             kist.restore();
         }
-        for (let i = 0; i < bronyaNaArbuze.length; i++) {
+        for (var i = 0; i < bronyaNaArbuze.length; i++) {
             kist.save();
             kist.rotate(bronyaNaArbuze[i]);
             kist.translate(0, tr + 20);
@@ -1800,8 +1873,8 @@
             kist.restore();
         }
 
-        for (let i = vsplyvayushieTeksty.length - 1; i >= 0; i--) {
-            let v = vsplyvayushieTeksty[i];
+        for (var i = vsplyvayushieTeksty.length - 1; i >= 0; i--) {
+            var v = vsplyvayushieTeksty[i];
             v.y += v.vy * deltaTime * 60;
             v.zhizn -= 0.02 * deltaTime * 60;
             if (v.zhizn > 0) {
@@ -1825,35 +1898,35 @@
     }
 
     // === ЗАПУСК ===
-    async function initGame() {
-        await new Promise(resolve => {
-            loadVkBridge(() => resolve());
+    function initGame() {
+        loadVkBridge(function() {
+            PlatformAdapter.init().then(function() {
+                var savedLang = null;
+                try { savedLang = localStorage.getItem('vk_snaiper_lang'); } catch (e) {}
+                var detectedLang = PlatformAdapter.getLanguage();
+                currentLang = (savedLang === 'ru' || savedLang === 'en') ? savedLang : detectedLang;
+                applyLanguage();
+
+                PlatformAdapter.signalReady();
+                PlatformAdapter.preloadAds();
+                nastroikaEkrana();
+                loadDataFromAdapter();
+                loadAudioFiles();
+
+                setTimeout(finishLoading, 8000);
+            });
         });
-        await PlatformAdapter.init();
-
-        let savedLang = null;
-        try { savedLang = localStorage.getItem('vk_snaiper_lang'); } catch (e) {}
-        const detectedLang = PlatformAdapter.getLanguage();
-        currentLang = (savedLang === 'ru' || savedLang === 'en') ? savedLang : detectedLang;
-        applyLanguage();
-
-        PlatformAdapter.signalReady();
-        nastroikaEkrana();
-        loadDataFromAdapter();
-        loadAudioFiles();
-
-        setTimeout(finishLoading, 8000);
     }
 
     window.addEventListener("resize", forceResize);
-    window.addEventListener("orientationchange", () => { setTimeout(forceResize, 100); });
+    window.addEventListener("orientationchange", function() { setTimeout(forceResize, 100); });
 
     if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', forceResize);
         window.visualViewport.addEventListener('scroll', forceResize);
     }
 
-    window.addEventListener("load", () => {
+    window.addEventListener("load", function() {
         setTimeout(forceResize, 100);
         setTimeout(forceResize, 500);
         setTimeout(forceResize, 1000);
