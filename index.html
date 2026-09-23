@@ -129,23 +129,6 @@
             font-size: 16px;
             font-weight: bold;
         }
-        #adToast {
-            position: absolute;
-            left: 50%; bottom: 60px;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.9);
-            color: #FFD700;
-            font: bold 12px Arial, sans-serif;
-            padding: 8px 14px;
-            border-radius: 10px;
-            z-index: 9000;
-            pointer-events: none;
-            max-width: 85%;
-            text-align: center;
-            display: none;
-            border: 1px solid #FFD700;
-        }
-        #adToast.show { display: block; }
         #panelZvuka {
             position: absolute;
             top: 10px; left: 10px;
@@ -500,7 +483,6 @@
                 </div>
                 <div class="preloader-percent" id="preloaderPercent">0%</div>
             </div>
-            <div id="adToast"></div>
             <div id="interfeis">
                 <div id="panelZvuka">
                     <button id="knopkaZvuka" class="knopkaZvukaOformlenie" aria-label="Sound">🔊</button>
@@ -612,16 +594,9 @@
     }
 
     // ============================================
-    // ДИАГНОСТИКА: плашка с сообщениями о рекламе
+    // ДИАГНОСТИКА: ТОЛЬКО в консоль, ничего на экране
     // ============================================
-    var adToastTimer = null;
-    function adToast(msg) {
-        var el = document.getElementById('adToast');
-        if (!el) return;
-        el.textContent = msg;
-        el.classList.add('show');
-        if (adToastTimer) clearTimeout(adToastTimer);
-        adToastTimer = setTimeout(function() { el.classList.remove('show'); }, 4000);
+    function adLog(msg) {
         console.log('[AD]', msg);
     }
 
@@ -642,12 +617,12 @@
                     vkBridge.send('VKWebAppInit').then(function() {
                         self.platform = 'vk';
                         self.vkBridge = vkBridge;
-                        console.log('[VK] Bridge initialized');
+                        adLog('Bridge initialized');
                         return vkBridge.send('VKWebAppGetUserInfo');
                     }).then(function(user) {
                         if (user) self.userId = user.id;
                     }).catch(function(e) {
-                        console.warn('[VK] Init warning:', e);
+                        adLog('Init warning: ' + (e && e.message ? e.message : e));
                         if (self.platform !== 'vk') {
                             self.platform = 'vk';
                             self.vkBridge = vkBridge;
@@ -665,7 +640,7 @@
                         resolve();
                     }, 100);
                 } else {
-                    console.log('[VK] Not inside VK → web mode');
+                    adLog('Not inside VK → web mode');
                     self.platform = 'web';
                     resolve();
                 }
@@ -683,15 +658,13 @@
             }
         },
 
-        // ПРЕДЗАГРУЗКА рекламы (фон, без задержек при показе)
         preloadAds: function() {
             if (this.platform !== 'vk' || !this.vkBridge) return;
             this.vkBridge.send('VKWebAppCheckNativeAds', { ad_format: 'interstitial' }).catch(function() {});
             this.vkBridge.send('VKWebAppCheckNativeAds', { ad_format: 'reward' }).catch(function() {});
-            console.log('[VK] Ads preloaded (interstitial + reward)');
+            adLog('Ads preloaded (interstitial + reward)');
         },
 
-        // ПРОВЕРКА готовности rewarded-материалов (обязательна по документации)
         checkRewardAds: function() {
             if (this.platform !== 'vk' || !this.vkBridge) return Promise.resolve(false);
             return this.vkBridge.send('VKWebAppCheckNativeAds', { ad_format: 'reward' })
@@ -713,7 +686,7 @@
                     }).catch(function() {});
                 }
             } catch (e) {
-                console.warn('[VK] Save error:', e);
+                adLog('Save error: ' + e);
             }
         },
 
@@ -753,7 +726,6 @@
             }
         },
 
-        // МЕЖСТРАНИЧНАЯ РЕКЛАМА (между уровнями)
         showInterstitial: function(onOpen, onClose, onError) {
             var self = this;
             var now = Date.now();
@@ -771,69 +743,56 @@
             this.vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' })
                 .then(function(data) {
                     self.lastInterstitialTime = Date.now();
-                    if (data && data.result) {
-                        adToast('Interstitial: показан успешно');
-                    } else {
-                        adToast('Interstitial: no-result');
-                    }
+                    adLog('Interstitial: ' + (data && data.result ? 'shown' : 'no-result'));
                     if (onClose) onClose();
                     self.preloadAds();
                 })
                 .catch(function(e) {
-                    var msg = e && e.error_type ? e.error_type : (e && e.message ? e.message : 'unknown');
-                    adToast('Interstitial error: ' + msg);
-                    console.warn('[VK] Interstitial error:', e);
+                    adLog('Interstitial error: ' + (e && e.error_type ? e.error_type : (e && e.message ? e.message : 'unknown')));
                     if (onError) onError();
                     if (onClose) onClose();
                 });
         },
 
-        // REWARDED: сначала Check, потом Show, иначе мягкий фолбэк (без client_error)
         showRewarded: function(onOpen, onRewarded, onClose, onError) {
             var self = this;
-            // Вне ВКонтакте — сразу фолбэк
             if (this.platform !== 'vk' || !this.vkBridge) {
-                adToast('Вне ВКонтакте: возрождение без ролика');
+                adLog('Rewarded: web-mode fallback (grant without ad)');
                 if (onOpen) onOpen();
                 setTimeout(function() { if (onRewarded) onRewarded(); if (onClose) onClose(); }, 400);
                 return;
             }
-            // 1) Проверяем, готовы ли материалы
             this.vkBridge.send('VKWebAppCheckNativeAds', { ad_format: 'reward' })
                 .then(function(checkData) {
                     if (checkData && checkData.result) {
-                        // материалы готовы — реально показываем ролик
                         self._doShowRewarded(onOpen, onRewarded, onClose, onError);
                     } else {
-                        // материалов нет — НЕ дёргаем Show (иначе client_error),
-                        // мягко возрождаем без ролика, чтобы кнопка всегда работала
-                        adToast('Рекламные материалы не готовы → возрождение без ролика');
+                        adLog('Rewarded: materials not ready → grant without ad');
                         if (onOpen) onOpen();
                         setTimeout(function() { if (onRewarded) onRewarded(); if (onClose) onClose(); }, 300);
                     }
                 })
                 .catch(function() {
-                    adToast('Check недоступен → возрождение без ролика');
+                    adLog('Rewarded: check unavailable → grant without ad');
                     if (onOpen) onOpen();
                     setTimeout(function() { if (onRewarded) onRewarded(); if (onClose) onClose(); }, 300);
                 });
         },
 
-        // Непосредственно показ rewarded-ролика (только когда Check=true)
         _doShowRewarded: function(onOpen, onRewarded, onClose, onError) {
             var self = this;
             if (onOpen) onOpen();
             var settled = false;
             var finishOk = function() {
                 if (settled) return; settled = true;
-                adToast('Rewarded: досмотрено → награда выдана');
+                adLog('Rewarded: watched → reward granted');
                 if (onRewarded) onRewarded();
                 if (onClose) onClose();
                 self.preloadAds();
             };
             var finishFail = function(reason) {
                 if (settled) return; settled = true;
-                adToast('Rewarded ошибка: ' + reason);
+                adLog('Rewarded error: ' + reason);
                 if (onError) onError();
                 if (onClose) onClose();
             };
