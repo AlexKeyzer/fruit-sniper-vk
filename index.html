@@ -559,6 +559,9 @@
             if (params.has('vk_app_id') || params.has('vk_user_id')) return true;
             var ref = document.referrer || '';
             if (ref.indexOf('vk.com') !== -1 || ref.indexOf('vk.ru') !== -1) return true;
+            var ua = navigator.userAgent || '';
+            if (ua.indexOf('VK') !== -1 || ua.indexOf('VKontakte') !== -1) return true;
+            if (window.parent !== window) return true;
             return false;
         } catch (e) {
             return false;
@@ -567,9 +570,10 @@
 
     // ============================================
     // НЕБЛОКИРУЮЩАЯ ЗАГРУЗКА VK BRIDGE (2 зеркала + таймаут)
+    // Всегда пытаемся загрузить мост, даже если isInsideVk() вернул false,
+    // чтобы реклама работала на десктопе при прямом открытии.
     // ============================================
     function loadVkBridge(callback) {
-        if (!isInsideVk()) { callback(false); return; }
         var urls = [
             'https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js',
             'https://cdn.jsdelivr.net/npm/@vkontakte/vk-bridge/dist/browser.min.js'
@@ -578,7 +582,11 @@
         var done = false;
         function tryNext() {
             if (done) return;
-            if (idx >= urls.length) { done = true; callback(false); return; }
+            if (idx >= urls.length) {
+                done = true;
+                callback(null);
+                return;
+            }
             var s = document.createElement('script');
             s.src = urls[idx];
             s.async = true;
@@ -586,8 +594,21 @@
                 s.onload = null; s.onerror = null;
                 idx++; tryNext();
             }, 4000);
-            s.onload = function() { clearTimeout(to); if (!done) { done = true; callback(true); } };
-            s.onerror = function() { clearTimeout(to); idx++; tryNext(); };
+            s.onload = function() {
+                clearTimeout(to);
+                if (!done) {
+                    done = true;
+                    if (typeof vkBridge !== 'undefined' && vkBridge) {
+                        callback(vkBridge);
+                    } else {
+                        callback(null);
+                    }
+                }
+            };
+            s.onerror = function() {
+                clearTimeout(to);
+                idx++; tryNext();
+            };
             document.head.appendChild(s);
         }
         tryNext();
@@ -613,11 +634,38 @@
         init: function() {
             var self = this;
             return new Promise(function(resolve) {
-                if (isInsideVk() && typeof vkBridge !== 'undefined' && vkBridge) {
+                // Если мост уже установлен извне (из loadVkBridge) — используем его
+                if (self.vkBridge && typeof self.vkBridge.send === 'function') {
+                    adLog('Using pre-assigned bridge');
+                    self.platform = 'vk';
+                    self.vkBridge.send('VKWebAppInit').then(function() {
+                        adLog('VKWebAppInit OK');
+                        return self.vkBridge.send('VKWebAppGetUserInfo');
+                    }).then(function(user) {
+                        if (user) self.userId = user.id;
+                        if (self.vkBridge.subscribe) {
+                            try {
+                                self.vkBridge.subscribe(function(event) {
+                                    if (event.detail && event.detail.type === 'VKWebAppViewHide') {
+                                        pauseGameForAd();
+                                    }
+                                });
+                            } catch (e) {}
+                        }
+                        resolve();
+                    }).catch(function(e) {
+                        adLog('Init warning: ' + (e && e.message ? e.message : e));
+                        resolve();
+                    });
+                    return;
+                }
+
+                // Стандартный путь: мост есть глобально и мы внутри VK
+                if (typeof vkBridge !== 'undefined' && vkBridge && isInsideVk()) {
+                    self.platform = 'vk';
+                    self.vkBridge = vkBridge;
                     vkBridge.send('VKWebAppInit').then(function() {
-                        self.platform = 'vk';
-                        self.vkBridge = vkBridge;
-                        adLog('Bridge initialized');
+                        adLog('VKWebAppInit OK');
                         return vkBridge.send('VKWebAppGetUserInfo');
                     }).then(function(user) {
                         if (user) self.userId = user.id;
@@ -631,11 +679,13 @@
 
                     setTimeout(function() {
                         if (self.vkBridge && self.vkBridge.subscribe) {
-                            self.vkBridge.subscribe(function(event) {
-                                if (event.detail && event.detail.type === 'VKWebAppViewHide') {
-                                    pauseGameForAd();
-                                }
-                            });
+                            try {
+                                self.vkBridge.subscribe(function(event) {
+                                    if (event.detail && event.detail.type === 'VKWebAppViewHide') {
+                                        pauseGameForAd();
+                                    }
+                                });
+                            } catch (e) {}
                         }
                         resolve();
                     }, 100);
@@ -748,9 +798,11 @@
                     self.preloadAds();
                 })
                 .catch(function(e) {
-                    adLog('Interstitial error: ' + (e && e.error_type ? e.error_type : (e && e.message ? e.message : 'unknown')));
+                    var errMsg = e && e.error_type ? e.error_type : (e && e.message ? e.message : 'unknown');
+                    adLog('Interstitial error: ' + errMsg);
                     if (onError) onError();
                     if (onClose) onClose();
+                    self.preloadAds();
                 });
         },
 
@@ -1875,7 +1927,19 @@
 
     // === ЗАПУСК ===
     function initGame() {
-        loadVkBridge(function() {
+        // Всегда пытаемся загрузить VK Bridge, независимо от isInsideVk().
+        // Это ключевое исправление: на десктопе при прямом открытии ссылки
+        // referrer и URL-параметры могут отсутствовать, но мост всё равно нужен для рекламы.
+        loadVkBridge(function(bridge) {
+            if (bridge) {
+                PlatformAdapter.vkBridge = bridge;
+                PlatformAdapter.platform = 'vk';
+                adLog('Bridge manually assigned from loadVkBridge');
+            } else {
+                adLog('Bridge not loaded → web mode');
+                PlatformAdapter.platform = 'web';
+            }
+
             PlatformAdapter.init().then(function() {
                 var savedLang = null;
                 try { savedLang = localStorage.getItem('vk_snaiper_lang'); } catch (e) {}
