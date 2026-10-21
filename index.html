@@ -430,6 +430,32 @@
         .MknopkaVybrat { background: #2196F3; }
         .MknopkaVybrano { background: #4CAF50; cursor: default; opacity: 0.8; }
         .MknopkaKupit:disabled { background: #555; cursor: not-allowed; color: #aaa; }
+        /* === НОВОЕ: туториал и рекорд === */
+        #tuutorialHint {
+            position: absolute;
+            bottom: 12%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.75);
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 20px;
+            font-family: Arial, sans-serif;
+            font-weight: bold;
+            font-size: 16px;
+            text-align: center;
+            pointer-events: none;
+            z-index: 150;
+            border: 2px solid rgba(255,255,255,0.3);
+            max-width: 80%;
+            text-shadow: 1px 1px 2px #000;
+        }
+        #tekstRekord {
+            margin: 0;
+            font-size: 14px;
+            color: #FFD700;
+            text-shadow: 1px 1px 2px #000;
+        }
         @media (max-width: 400px) {
             .game-container { max-width: 100vw; }
             .ekran, .popup-overlay { padding: 10px; width: 95%; gap: 8px; max-height: 85vh; }
@@ -444,6 +470,7 @@
             .ikonkaMonety { width: 18px; height: 18px; }
             #panelZvuka { padding: 4px 8px; }
             #polzunokZvuka { width: 45px; }
+            #tuutorialHint { font-size: 14px; padding: 8px 12px; }
         }
         @media (max-width: 320px) {
             .ekran, .popup-overlay { padding: 8px; gap: 6px; }
@@ -454,6 +481,7 @@
             .btn-icon { font-size: 18px; }
             .btn-text small { font-size: 9px; }
             #panelMonet, .game-hud { font-size: 14px; }
+            #tuutorialHint { font-size: 12px; }
         }
         @media (max-height: 500px) {
             .ekran, .popup-overlay { max-height: 90vh; padding: 8px; gap: 5px; }
@@ -504,7 +532,9 @@
                 <div id="panelNozhei" class="game-hud skryto">
                     <span id="tekstNozhei">Knives: 5</span>
                 </div>
+                <div id="tuutorialHint" class="skryto"></div>
                 <div id="glavnoeMenu" class="ekran main-menu popup-scale-target">
+                    <p id="tekstRekord">Рекорд: уровень 1</p>
                     <button id="knopkaIgrat" class="knopka">PLAY</button>
                     <button id="knopkaMagazin" class="knopka knopkaMagazinaCvet">SKINS SHOP</button>
                 </div>
@@ -531,6 +561,26 @@
                     <h2 id="ui_reward" style="color:white;">REWARD!</h2>
                     <h1 id="tekstNagrady" style="color: #FFD700; margin: 10px 0; font-size: 30px;">50 🍎</h1>
                     <button id="ui_claim" class="knopka" onclick="window._game.zakrytPopup()">CLAIM</button>
+                </div>
+                <!-- === НОВОЕ: ежедневная награда === -->
+                <div id="popupDaily" class="ekran popup-overlay popup-scale-target skryto">
+                    <h2 id="ui_daily_title">ЕЖЕДНЕВНАЯ НАГРАДА</h2>
+                    <h1 id="tekstDaily" style="color: #FFD700; margin: 10px 0; font-size: 30px;">+20 🍎</h1>
+                    <button id="knopkaDailyClaim" class="knopka">ЗАБРАТЬ</button>
+                    <button id="knopkaDailyDouble" class="knopka knopkaReklama">
+                        <span class="btn-icon">🎬</span>
+                        <span class="btn-text">×2 ЗА ВИДЕО</span>
+                    </button>
+                </div>
+                <!-- === НОВОЕ: уровень пройден, ×2 за видео === -->
+                <div id="popupLevelComplete" class="ekran popup-overlay popup-scale-target skryto">
+                    <h2 id="ui_lc_title">УРОВЕНЬ ПРОЙДЕН!</h2>
+                    <h1 id="tekstLcReward" style="color: #FFD700; margin: 10px 0; font-size: 30px;">+5 🍎</h1>
+                    <button id="knopkaLcClaim" class="knopka">ЗАБРАТЬ</button>
+                    <button id="knopkaLcDouble" class="knopka knopkaReklama">
+                        <span class="btn-icon">🎬</span>
+                        <span class="btn-text">×2 ЗА ВИДЕО</span>
+                    </button>
                 </div>
                 <div id="ekranProigrysha" class="ekran popup-overlay popup-scale-target skryto">
                     <h1 id="ui_gameover" class="krasnyiTekst" style="font-size: 22px;">GAME OVER!</h1>
@@ -570,8 +620,6 @@
 
     // ============================================
     // НЕБЛОКИРУЮЩАЯ ЗАГРУЗКА VK BRIDGE (2 зеркала + таймаут)
-    // Всегда пытаемся загрузить мост, даже если isInsideVk() вернул false,
-    // чтобы реклама работала на десктопе при прямом открытии.
     // ============================================
     function loadVkBridge(callback) {
         var urls = [
@@ -615,14 +663,14 @@
     }
 
     // ============================================
-    // ДИАГНОСТИКА: ТОЛЬКО в консоль, ничего на экране
+    // ДИАГНОСТИКА: ТОЛЬКО в консоль
     // ============================================
     function adLog(msg) {
         console.log('[AD]', msg);
     }
 
     // ============================================
-    // PLATFORM ADAPTER — VK Bridge (по документации VK)
+    // PLATFORM ADAPTER — VK Bridge
     // ============================================
     var PlatformAdapter = {
         platform: 'web',
@@ -634,7 +682,6 @@
         init: function() {
             var self = this;
             return new Promise(function(resolve) {
-                // Если мост уже установлен извне (из loadVkBridge) — используем его
                 if (self.vkBridge && typeof self.vkBridge.send === 'function') {
                     adLog('Using pre-assigned bridge');
                     self.platform = 'vk';
@@ -660,7 +707,6 @@
                     return;
                 }
 
-                // Стандартный путь: мост есть глобально и мы внутри VK
                 if (typeof vkBridge !== 'undefined' && vkBridge && isInsideVk()) {
                     self.platform = 'vk';
                     self.vkBridge = vkBridge;
@@ -729,6 +775,10 @@
                 localStorage.setItem('vk_snaiper_selectedSkin', data.selectedSkin);
                 localStorage.setItem('vk_snaiper_volume', String(data.volume));
                 localStorage.setItem('vk_snaiper_muted', data.muted ? '1' : '0');
+                // === НОВОЕ: сохраняем прогресс/рекорд/дейлик/туториал ===
+                localStorage.setItem('vk_snaiper_bestLevel', String(data.bestLevel));
+                localStorage.setItem('vk_snaiper_dailyDate', String(data.dailyDate || ''));
+                localStorage.setItem('vk_snaiper_tutorialDone', data.tutorialDone ? '1' : '0');
                 if (this.platform === 'vk' && this.vkBridge) {
                     this.vkBridge.send('VKWebAppStorageSet', {
                         key: 'vk_snaiper_save',
@@ -766,12 +816,18 @@
                 var sel = localStorage.getItem('vk_snaiper_selectedSkin');
                 var v = parseFloat(localStorage.getItem('vk_snaiper_volume'));
                 var mut = localStorage.getItem('vk_snaiper_muted') === '1';
+                var bl = parseInt(localStorage.getItem('vk_snaiper_bestLevel'));
+                var dd = localStorage.getItem('vk_snaiper_dailyDate') || '';
+                var td = localStorage.getItem('vk_snaiper_tutorialDone') === '1';
                 return {
                     monety: isNaN(m) ? 0 : m,
                     skins: (s && s.length) ? s : ["knife"],
                     selectedSkin: sel || "knife",
                     volume: isNaN(v) ? 0.4 : v,
-                    muted: mut
+                    muted: mut,
+                    bestLevel: isNaN(bl) || bl < 1 ? 1 : bl,
+                    dailyDate: dd,
+                    tutorialDone: td
                 };
             }
         },
@@ -955,6 +1011,18 @@
     var uiTekstLevel = document.getElementById("tekstLevel");
     var uiTekstNozhei = document.getElementById("tekstNozhei");
 
+    // === НОВЫЕ элементы ===
+    var uiPopupDaily = document.getElementById("popupDaily");
+    var uiTekstDaily = document.getElementById("tekstDaily");
+    var knopkaDailyClaim = document.getElementById("knopkaDailyClaim");
+    var knopkaDailyDouble = document.getElementById("knopkaDailyDouble");
+    var uiPopupLevelComplete = document.getElementById("popupLevelComplete");
+    var uiTekstLcReward = document.getElementById("tekstLcReward");
+    var knopkaLcClaim = document.getElementById("knopkaLcClaim");
+    var knopkaLcDouble = document.getElementById("knopkaLcDouble");
+    var uiTuutorialHint = document.getElementById("tuutorialHint");
+    var uiTekstRekord = document.getElementById("tekstRekord");
+
     document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
     document.addEventListener('selectstart', function(e) { e.preventDefault(); });
     document.addEventListener('dragstart', function(e) { e.preventDefault(); });
@@ -993,6 +1061,12 @@
     var monety = 0;
     var kuplyennyeSkins = ["knife"];
     var vybrannyiSkinId = "knife";
+    // === НОВЫЕ переменные прогрессии ===
+    var bestLevel = 1;
+    var dailyDate = '';
+    var tutorialDone = false;
+    var currentLevelBonus = 0;
+    var tutorialStep = -1;
 
     function pauseGameForAd() {
         if (masterGain) masterGain.gain.value = 0;
@@ -1138,7 +1212,10 @@
             skins: kuplyennyeSkins,
             selectedSkin: vybrannyiSkinId,
             volume: currentVolume,
-            muted: isMuted
+            muted: isMuted,
+            bestLevel: bestLevel,
+            dailyDate: dailyDate,
+            tutorialDone: tutorialDone
         });
     }
 
@@ -1150,7 +1227,12 @@
                 if (data.selectedSkin) vybrannyiSkinId = data.selectedSkin;
                 if (data.volume !== undefined) currentVolume = data.volume;
                 if (data.muted !== undefined) isMuted = data.muted;
+                if (data.bestLevel !== undefined) bestLevel = data.bestLevel;
+                if (data.dailyDate !== undefined) dailyDate = data.dailyDate;
+                if (data.tutorialDone !== undefined) tutorialDone = !!data.tutorialDone;
                 updateUI();
+                updateRecordUI();
+                checkDailyReward();
             }
         });
     }
@@ -1158,6 +1240,37 @@
     function updateUI() {
         if (uiMonety) uiMonety.innerText = monety;
         updateVolumeUI();
+    }
+
+    // === НОВЫЕ функции прогрессии ===
+    function getTodayKey() {
+        try { return new Date().toISOString().slice(0, 10); } catch (e) { return ''; }
+    }
+    function updateRecordUI() {
+        if (uiTekstRekord) uiTekstRekord.innerText = t("record") + bestLevel;
+    }
+    function checkDailyReward() {
+        var today = getTodayKey();
+        if (!today) return;
+        if (dailyDate !== today) {
+            if (uiTekstDaily) uiTekstDaily.innerText = '+' + 20 + ' 🍎';
+            if (uiPopupDaily) uiPopupDaily.classList.remove("skryto");
+            scaleMenus();
+        } else if (uiPopupDaily) {
+            uiPopupDaily.classList.add("skryto");
+        }
+    }
+    function showTutorial(step) {
+        if (tutorialDone) { hideTutorial(); return; }
+        tutorialStep = step;
+        if (!uiTuutorialHint) return;
+        var key = (step === 0) ? "tut0" : "tut1";
+        uiTuutorialHint.innerText = t(key);
+        uiTuutorialHint.classList.remove("skryto");
+    }
+    function hideTutorial() {
+        tutorialStep = -1;
+        if (uiTuutorialHint) uiTuutorialHint.classList.add("skryto");
     }
 
     // === АУДИО ===
@@ -1268,7 +1381,12 @@
             pause: "ПАУЗА", toMenu: "В ГЛАВНОЕ МЕНЮ",
             knife: "Нож", pencil: "Карандаш", sword: "Меч",
             shuriken: "Сюрикен", axe: "Топор", wand: "Посох",
-            legendary: "Легендарный Клинок"
+            legendary: "Легендарный Клинок",
+            record: "Рекорд: уровень ",
+            dailyTitle: "ЕЖЕДНЕВНАЯ НАГРАДА", dailyClaim: "ЗАБРАТЬ", dailyDouble: "×2 ЗА ВИДЕО",
+            lcTitle: "УРОВЕНЬ ПРОЙДЕН!", lcClaim: "ЗАБРАТЬ", lcDouble: "×2 ЗА ВИДЕО",
+            tut0: "Тапни, чтобы бросить нож",
+            tut1: "Яблоко = монета! Не попади в шип, нож или метеор"
         },
         en: {
             title: "FRUIT SNIPER",
@@ -1282,7 +1400,12 @@
             pause: "PAUSE", toMenu: "MAIN MENU",
             knife: "Knife", pencil: "Pencil", sword: "Sword",
             shuriken: "Shuriken", axe: "Axe", wand: "Wand",
-            legendary: "Legendary Blade"
+            legendary: "Legendary Blade",
+            record: "Best: level ",
+            dailyTitle: "DAILY REWARD", dailyClaim: "CLAIM", dailyDouble: "×2 FOR VIDEO",
+            lcTitle: "LEVEL COMPLETE!", lcClaim: "CLAIM", lcDouble: "×2 FOR VIDEO",
+            tut0: "Tap to throw the knife",
+            tut1: "Apple = coin! Avoid spikes, knives and meteors"
         }
     };
 
@@ -1315,8 +1438,17 @@
         if (el("knopkaRestartPauza")) el("knopkaRestartPauza").innerText = t("restart");
         if (el("knopkaVMenyu")) el("knopkaVMenyu").innerText = t("toMenu");
         if (el("knopkaVMenyuGO")) el("knopkaVMenyuGO").innerText = t("toMenu");
+        // === НОВЫЕ тексты ===
+        if (el("ui_daily_title")) el("ui_daily_title").innerText = t("dailyTitle");
+        if (el("knopkaDailyClaim")) el("knopkaDailyClaim").innerText = t("dailyClaim");
+        if (el("knopkaDailyDouble")) el("knopkaDailyDouble").innerHTML = '<span class="btn-icon">🎬</span><span class="btn-text">' + t("dailyDouble") + '</span>';
+        if (el("ui_lc_title")) el("ui_lc_title").innerText = t("lcTitle");
+        if (el("knopkaLcClaim")) el("knopkaLcClaim").innerText = t("lcClaim");
+        if (el("knopkaLcDouble")) el("knopkaLcDouble").innerHTML = '<span class="btn-icon">🎬</span><span class="btn-text">' + t("lcDouble") + '</span>';
         obnovitKnopkuYazyka();
         updateHUD();
+        updateRecordUI();
+        if (!tutorialDone && sostoyanieIgry === "PLAY" && tutorialStep >= 0) showTutorial(tutorialStep);
         otrisovatMagazin();
     }
 
@@ -1396,8 +1528,51 @@
     if (knopkaProdolzit) knopkaProdolzit.onclick = zakrytPauzu;
     if (knopkaRestartPauza) knopkaRestartPauza.onclick = function() { zakrytPauzu(); sbrosIgry(); };
     if (knopkaVMenyu) knopkaVMenyu.onclick = function() { zakrytPauzu(); vozvratVMenyu(); };
-    if (knopkaVMenyuGO) knopkaVMenyuGO.onclick = function() { vozvratVMenyu(); };
     if (knopkaZanovo) knopkaZanovo.onclick = function() { sbrosIgry(); };
+    // === НОВОЕ: interstitial при выходе из меню проигрыша ===
+    if (knopkaVMenyuGO) knopkaVMenyuGO.onclick = function() {
+        vozvratVMenyu();
+        PlatformAdapter.showInterstitial(pauseGameForAd, resumeGameAfterAd, resumeGameAfterAd);
+    };
+
+    // === НОВЫЕ обработчики ежедневной награды ===
+    if (knopkaDailyClaim) {
+        knopkaDailyClaim.onclick = function() {
+            var today = getTodayKey();
+            if (dailyDate === today) {
+                if (uiPopupDaily) uiPopupDaily.classList.add("skryto");
+                return;
+            }
+            dailyDate = today;
+            dobavitMonety(20);
+            saveData();
+            if (uiPopupDaily) uiPopupDaily.classList.add("skryto");
+            playSnd("win");
+        };
+    }
+    if (knopkaDailyDouble) {
+        knopkaDailyDouble.onclick = function() {
+            var today = getTodayKey();
+            if (dailyDate === today) {
+                if (uiPopupDaily) uiPopupDaily.classList.add("skryto");
+                return;
+            }
+            PlatformAdapter.showRewarded(
+                pauseGameForAd,
+                function() {
+                    dailyDate = today;
+                    dobavitMonety(40);
+                    saveData();
+                    if (uiPopupDaily) uiPopupDaily.classList.add("skryto");
+                    playSnd("win");
+                },
+                function() {},
+                function() {
+                    if (uiPopupDaily) uiPopupDaily.classList.add("skryto");
+                }
+            );
+        };
+    }
 
     function dobavitMonety(k) {
         monety += k;
@@ -1543,6 +1718,7 @@
         if (uiEkranProigrysha) uiEkranProigrysha.classList.add("skryto");
         if (ekranPauzy) ekranPauzy.classList.add("skryto");
         if (uiPopupNagrada) uiPopupNagrada.classList.add("skryto");
+        if (uiPopupLevelComplete) uiPopupLevelComplete.classList.add("skryto");
         if (uiGlavnoeMenu) uiGlavnoeMenu.classList.remove("skryto");
         if (uiPanelMonet) uiPanelMonet.classList.remove("skryto");
         vteknutieNozhi = [];
@@ -1552,6 +1728,8 @@
         nozh.letit = false;
         nozh.y = startNozhY;
         padayushiyNozh = null;
+        hideTutorial();
+        updateRecordUI();
         updateHUD();
     }
 
@@ -1559,6 +1737,7 @@
         if (sostoyanieIgry === "PLAY" && !nozh.letit && ostalosNozhei > 0) {
             nozh.letit = true;
             playSnd("throw");
+            if (!tutorialDone && tutorialStep === 0) showTutorial(1);
         }
     }
 
@@ -1605,15 +1784,18 @@
         nozh.letit = false;
         fazaDvizheniya = 0;
         pauzaAktivna = false;
+        currentLevelBonus = 0;
         if (ekranPauzy) ekranPauzy.classList.add("skryto");
         if (uiEkranProigrysha) uiEkranProigrysha.classList.add("skryto");
         if (uiPopupNagrada) uiPopupNagrada.classList.add("skryto");
+        if (uiPopupLevelComplete) uiPopupLevelComplete.classList.add("skryto");
         if (arbuz) arbuz.y = arbuz.bazi_Y;
         meteor.aktiven = false;
         meteor.skorost = 0.04 * SPEED_MULTIPLIER;
         sostoyanieIgry = "PLAY";
         if (uiGlavnoeMenu) uiGlavnoeMenu.classList.add("skryto");
         sozdatYablokiIBronyu();
+        if (!tutorialDone) showTutorial(0); else hideTutorial();
         updateHUD();
         updateUI();
     }
@@ -1649,21 +1831,50 @@
         return true;
     }
 
-    function sleduyushiyUroven() {
-        playSnd("win");
-        tryaskaEkrana = 15;
-        var cv = ["#ff3333", "#cc0000", "#ff6666", "#2eb82e", "#000", "#d4a373"];
-        for (var i = 0; i < 80; i++) {
-            var es = Math.random() > 0.85;
-            oskolki.push({
-                x: 200, y: arbuz.y,
-                vx: (Math.random() - 0.5) * 25, vy: (Math.random() - 0.5) * 25 - 5,
-                razmer: es ? 3 : Math.random() * 8 + 3,
-                cvet: es ? "#000" : cv[Math.floor(Math.random() * cv.length)],
-                zhizn: 1, skorostIscheznoveniya: Math.random() * 0.02 + 0.01
-            });
-        }
-        uroven++;
+    // === НОВОЕ: попап уровня и подготовка следующего ===
+    function closeLevelPopupOnly() {
+        if (uiPopupLevelComplete) uiPopupLevelComplete.classList.add("skryto");
+        currentLevelBonus = 0;
+        sostoyanieIgry = "PLAY";
+        updateHUD();
+        scaleMenus();
+    }
+    function pokazatPopupLevelComplete(bonus) {
+        currentLevelBonus = bonus;
+        if (uiTekstLcReward) uiTekstLcReward.innerText = '+' + bonus + ' 🍎';
+        if (uiPopupLevelComplete) uiPopupLevelComplete.classList.remove("skryto");
+        sostoyanieIgry = "POPUP";
+        updateHUD();
+        scaleMenus();
+    }
+    if (knopkaLcClaim) {
+        knopkaLcClaim.onclick = function() {
+            closeLevelPopupOnly();
+            PlatformAdapter.showInterstitial(pauseGameForAd, resumeGameAfterAd, resumeGameAfterAd);
+        };
+    }
+    if (knopkaLcDouble) {
+        knopkaLcDouble.onclick = function() {
+            PlatformAdapter.showRewarded(
+                pauseGameForAd,
+                function() {
+                    if (currentLevelBonus > 0) {
+                        dobavitMonety(currentLevelBonus);
+                        playSnd("win");
+                    }
+                    closeLevelPopupOnly();
+                },
+                function() {
+                    PlatformAdapter.showInterstitial(pauseGameForAd, resumeGameAfterAd, resumeGameAfterAd);
+                },
+                function() {
+                    closeLevelPopupOnly();
+                }
+            );
+        };
+    }
+
+    function podgotovitNovyyUroven() {
         var eb = (uroven % 5 === 0);
         var bn = 5 + Math.floor(uroven / 3);
         if (eb) bn += 1;
@@ -1682,8 +1893,39 @@
         } else {
             meteor.aktiven = false;
         }
+    }
+
+    function sleduyushiyUroven() {
+        playSnd("win");
+        tryaskaEkrana = 15;
+        var cv = ["#ff3333", "#cc0000", "#ff6666", "#2eb82e", "#000", "#d4a373"];
+        for (var i = 0; i < 80; i++) {
+            var es = Math.random() > 0.85;
+            oskolki.push({
+                x: 200, y: arbuz.y,
+                vx: (Math.random() - 0.5) * 25, vy: (Math.random() - 0.5) * 25 - 5,
+                razmer: es ? 3 : Math.random() * 8 + 3,
+                cvet: es ? "#000" : cv[Math.floor(Math.random() * cv.length)],
+                zhizn: 1, skorostIscheznoveniya: Math.random() * 0.02 + 0.01
+            });
+        }
+        var passedLevel = uroven;
+        var bonus = 3 + Math.floor(passedLevel / 2);
+        dobavitMonety(bonus);
+        if (passedLevel + 1 > bestLevel) {
+            bestLevel = passedLevel + 1;
+            saveData();
+            updateRecordUI();
+        }
+        if (!tutorialDone) {
+            tutorialDone = true;
+            saveData();
+            hideTutorial();
+        }
+        uroven++;
+        podgotovitNovyyUroven();
         updateHUD();
-        PlatformAdapter.showInterstitial(pauseGameForAd, resumeGameAfterAd, resumeGameAfterAd);
+        pokazatPopupLevelComplete(bonus);
     }
 
     function poluchitKartinkuMisheni() {
@@ -1927,9 +2169,6 @@
 
     // === ЗАПУСК ===
     function initGame() {
-        // Всегда пытаемся загрузить VK Bridge, независимо от isInsideVk().
-        // Это ключевое исправление: на десктопе при прямом открытии ссылки
-        // referrer и URL-параметры могут отсутствовать, но мост всё равно нужен для рекламы.
         loadVkBridge(function(bridge) {
             if (bridge) {
                 PlatformAdapter.vkBridge = bridge;
